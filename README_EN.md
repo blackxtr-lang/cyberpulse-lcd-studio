@@ -19,8 +19,8 @@
   <img src="https://img.shields.io/badge/%F0%9F%93%A5%20Download%20for%20Windows-Portable%20.EXE%20(ZIP)-00885d?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows (.exe)" height="42" />
 </a>
 &nbsp;&nbsp;
-<a href="https://www.buymeacoffee.com/blackxtr" target="_blank">
-  <img src="https://img.shields.io/badge/%E2%98%95%20Buy%20Me%20A%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" height="42" />
+<a href="https://github.com/sponsors/blackxtr-lang" target="_blank">
+  <img src="https://img.shields.io/badge/%E2%98%95%20Buy%20Me%20A%20Coffee-GitHub%20Sponsors%20%E2%9D%A4%EF%B8%8F-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="GitHub Sponsors - Buy Me A Coffee" height="42" />
 </a>
 
 </div>
@@ -83,8 +83,8 @@ python cyberpulse_studio/main_gui.py
 
 <div align="center">
 
-<a href="https://www.buymeacoffee.com/blackxtr" target="_blank">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="54" />
+<a href="https://github.com/sponsors/blackxtr-lang" target="_blank">
+  <img src="https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F%20GitHub%20Sponsors-%E2%98%95%20Buy%20Me%20A%20Coffee%20%2F%20Support-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub" height="48" />
 </a>
 
 </div>

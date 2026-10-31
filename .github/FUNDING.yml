@@ -1,8 +1,2 @@
-# GitHub "Sponsor" Butonu Yapilandirmasi
-# Buy Me a Coffee veya diger platformlarda hesap actiginizda kullanici adinizi guncelleyebilirsiniz.
-
-buy_me_a_coffee: blackxtr
-ko_fi: # blackxtr
-patreon: # blackxtr
+# GitHub Sponsors Yapilandirmasi (Stripe Express + TR IBAN)
 github: [blackxtr-lang]
-custom: ["https://www.buymeacoffee.com/blackxtr"]

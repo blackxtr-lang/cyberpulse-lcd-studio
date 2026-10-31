@@ -23,8 +23,8 @@
   <img src="https://img.shields.io/badge/%F0%9F%93%A5%20%C4%B0ndir%20%2F%20Download%20(.EXE)-Windows%20Portable%20ZIP-00885d?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Portable (.exe)" height="44" />
 </a>
 &nbsp;&nbsp;
-<a href="https://www.buymeacoffee.com/blackxtr" target="_blank">
-  <img src="https://img.shields.io/badge/%E2%98%95%20Bana%20Bir%20Kahve%20Ismarla-Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" height="44" />
+<a href="https://github.com/sponsors/blackxtr-lang" target="_blank">
+  <img src="https://img.shields.io/badge/%E2%98%95%20Bana%20Bir%20Kahve%20Ismarla-GitHub%20Sponsors%20%E2%9D%A4%EF%B8%8F-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="GitHub Sponsors - Bana Bir Kahve Ismarla" height="44" />
 </a>
 
 </div>
@@ -124,8 +124,8 @@ python cyberpulse_studio/main_gui.py
 
 <div align="center">
 
-<a href="https://www.buymeacoffee.com/blackxtr" target="_blank">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="54" />
+<a href="https://github.com/sponsors/blackxtr-lang" target="_blank">
+  <img src="https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F%20GitHub%20Sponsors-%E2%98%95%20Bana%20Bir%20Kahve%20Ismarla%20%2F%20Buy%20Me%20A%20Coffee-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub" height="48" />
 </a>
 
 </div>
