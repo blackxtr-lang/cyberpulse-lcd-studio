@@ -11,8 +11,8 @@
 <br/>
 
 <!-- ☕ BANA BİR KAHVE ISMARLA / BAĞIŞ BUTONU -->
-<!-- Hesabınızı açtığınızda aşağıdaki KULLANICI_ADINIZ kısımlarını kendi kullanıcı adınızla değiştirin -->
-<a href="https://www.buymeacoffee.com/KULLANICI_ADINIZ" target="_blank">
+<!-- Buy Me a Coffee hesabınızdaki kullanıcı adınız farklıysa 'blackxtr' kısmını güncelleyebilirsiniz -->
+<a href="https://www.buymeacoffee.com/blackxtr" target="_blank">
   <img src="https://img.shields.io/badge/%E2%98%95%20Bana%20Bir%20Kahve%20Ismarla-Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Bana Bir Kahve Ismarla" height="42" />
 </a>
 
@@ -50,7 +50,7 @@
 
 ### 1. Gereksinimleri Yükleyin
 ```bash
-git clone https://github.com/KULLANICI_ADINIZ/cyberpulse-lcd-studio.git
+git clone https://github.com/blackxtr-lang/cyberpulse-lcd-studio.git
 cd cyberpulse-lcd-studio
 pip install -r requirements.txt
 ```
@@ -69,8 +69,8 @@ python cyberpulse_studio/main_gui.py
 
 <div align="center">
 
-<!-- Hesabınızı açtığınızda KULLANICI_ADINIZ kısmını kendi kullanıcı adınızla değiştirin -->
-<a href="https://www.buymeacoffee.com/KULLANICI_ADINIZ" target="_blank">
+<!-- Buy Me a Coffee hesabınızdaki kullanıcı adınız farklıysa 'blackxtr' kısmını güncelleyebilirsiniz -->
+<a href="https://www.buymeacoffee.com/blackxtr" target="_blank">
   <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="54" />
 </a>
 

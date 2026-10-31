@@ -1,8 +1,8 @@
 # GitHub "Sponsor" Butonu Yapilandirmasi
-# Hesap actiginizda asagidaki KULLANICI_ADINIZ kismini kendi kullanici adinizla degistirin.
+# Buy Me a Coffee veya diger platformlarda hesap actiginizda kullanici adinizi guncelleyebilirsiniz.
 
-buy_me_a_coffee: KULLANICI_ADINIZ
-ko_fi: # KULLANICI_ADINIZ
-patreon: # KULLANICI_ADINIZ
-github: # [GITHUB_KULLANICI_ADINIZ]
-custom: ["https://www.buymeacoffee.com/KULLANICI_ADINIZ"]
+buy_me_a_coffee: blackxtr
+ko_fi: # blackxtr
+patreon: # blackxtr
+github: [blackxtr-lang]
+custom: ["https://www.buymeacoffee.com/blackxtr"]
