@@ -1,0 +1,83 @@
+name: Build Windows EXE & Publish Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies & PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build CyberPulse_Studio.exe
+        run: |
+          pyinstaller --noconfirm --clean --onedir --windowed `
+            --name "CyberPulse_Studio" `
+            --icon "cyberpulse_studio/cyberpulse.ico" `
+            --paths "cyberpulse_studio" `
+            --add-data "cyberpulse_studio/cyberpulse.ico;." `
+            --add-data "cyberpulse_studio/checkmark.png;." `
+            --add-data "cyberpulse_studio/radio_checked.png;." `
+            --hidden-import "i18n" `
+            --hidden-import "case_screen_profiles" `
+            --hidden-import "game_profile_manager" `
+            --hidden-import "hardware_driver" `
+            --hidden-import "sensor_monitor" `
+            --hidden-import "rgb_studio_gui" `
+            "cyberpulse_studio/main_gui.py"
+
+      - name: Package Portable Release ZIP
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist/CyberPulse_Studio/themes" | Out-Null
+          Copy-Item "cyberpulse_studio/cyberpulse.ico" "dist/CyberPulse_Studio/" -Force
+          Copy-Item "cyberpulse_studio/checkmark.png" "dist/CyberPulse_Studio/" -Force
+          Copy-Item "cyberpulse_studio/radio_checked.png" "dist/CyberPulse_Studio/" -Force
+          Compress-Archive -Path "dist/CyberPulse_Studio/*" -DestinationPath "CyberPulse_Studio_Windows_x64.zip" -Force
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CyberPulse_Studio_Windows_x64
+          path: CyberPulse_Studio_Windows_x64.zip
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: "⚡ CyberPulse LCD Studio — Windows Portable (.exe)"
+          body: |
+            ## 🇹🇷 Türkçe — Kurulumsuz Taşınabilir Windows Sürümü (.exe)
+            1. Aşağıdaki **`CyberPulse_Studio_Windows_x64.zip`** dosyasını indirin ve bir klasöre çıkartın.
+            2. Klasör içindeki **`CyberPulse_Studio.exe`** dosyasına çift tıklayarak doğrudan çalıştırın (Python kurulumu gerektirmez).
+            3. Sol menünün altındaki **`🌐 Dil: TR / EN`** butonuyla Türkçe ve İngilizce arasında anında geçiş yapabilirsiniz.
+
+            ---
+
+            ## 🇬🇧 English — Portable Windows Release (.exe)
+            1. Download **`CyberPulse_Studio_Windows_x64.zip`** below and extract it to any folder.
+            2. Double-click **`CyberPulse_Studio.exe`** to launch immediately (no Python installation required).
+            3. Switch between **English** and **Turkish** anytime using the **`🌐 Language: EN / TR`** button in the left sidebar.
+          files: CyberPulse_Studio_Windows_x64.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

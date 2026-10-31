@@ -2,6 +2,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
+dist/
+build/
+build_work/
+*.spec
 
 # Virtual environments
 .venv/

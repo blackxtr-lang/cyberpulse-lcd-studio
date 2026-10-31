@@ -278,8 +278,15 @@ try:
     import clr
     import System
 
-    dll_dir = os.path.dirname(os.path.abspath(__file__))
+    if getattr(sys, 'frozen', False):
+        dll_dir = os.path.dirname(os.path.abspath(sys.executable))
+        bundle_dir = getattr(sys, '_MEIPASS', dll_dir)
+    else:
+        dll_dir = os.path.dirname(os.path.abspath(__file__))
+        bundle_dir = dll_dir
     dll_path = os.path.abspath(os.path.join(dll_dir, "DLS_SDK.dll"))
+    if not os.path.isfile(dll_path):
+        dll_path = os.path.abspath(os.path.join(bundle_dir, "DLS_SDK.dll"))
     
     if os.path.isfile(dll_path):
         try:
@@ -861,7 +868,7 @@ class HardwareDriver:
 
         # Auto-resolve relative theme path if needed (confined to app directory)
         if not os.path.isabs(bg_path) and not os.path.exists(bg_path):
-            app_dir = os.path.dirname(os.path.abspath(__file__))
+            app_dir = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
             safe_rel = os.path.basename(bg_path)
             cand1 = os.path.join(app_dir, safe_rel)
             cand2 = os.path.join(app_dir, 'themes', safe_rel)

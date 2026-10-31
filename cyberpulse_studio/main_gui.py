@@ -65,7 +65,7 @@ except Exception as e:
 import io
 from PIL import Image, ImageDraw
 
-from PyQt5.QtCore import Qt, QTimer, QPoint, QRect, QSize, QThread, pyqtSignal, QDateTime, QObject
+from PyQt5.QtCore import Qt, QTimer, QPoint, QRect, QSize, QThread, pyqtSignal, QDateTime, QObject, QEvent
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QBrush, QIcon, QCursor, QKeySequence, QFont
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QDialog, QWidget, QVBoxLayout, QHBoxLayout,
@@ -74,6 +74,7 @@ from PyQt5.QtWidgets import (
     QSplitter, QMessageBox, QFrame, QCheckBox, QSystemTrayIcon, QMenu, QAction, QInputDialog,
     QDateTimeEdit, QKeySequenceEdit, QScrollArea, QSizePolicy, QProgressBar
 )
+from i18n import apply_language_to_widget_tree, translate_text
 
 try:
     import keyboard
@@ -81,6 +82,22 @@ try:
 except Exception as e:
     print("Keyboard hook note:", e)
     HAS_KEYBOARD = False
+
+class LanguageEventFilter(QObject):
+    """Automatically translates any QDialog or QMainWindow when shown."""
+    def __init__(self, gui_ref):
+        super().__init__(gui_ref)
+        self.gui = gui_ref
+
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() == QEvent.Show and isinstance(obj, QDialog):
+                lang = str(self.gui.app_settings.get('language', 'tr')).lower()
+                apply_language_to_widget_tree(obj, lang)
+        except Exception:
+            pass
+        return False
+
 
 class HotkeyBridge(QObject):
     next_theme_signal = pyqtSignal()
@@ -109,11 +126,18 @@ from game_profile_manager import (
     sanitize_exe_name
 )
 
-LAST_THEME_FILE = os.path.join(os.path.dirname(__file__), 'last_theme.json')
-SCREEN_WORKSPACES_FILE = os.path.join(os.path.dirname(__file__), 'screen_workspaces.json')
-APP_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'app_settings.json')
-PRESET_THEMES_DIR = os.path.join(os.path.dirname(__file__), 'themes')
-RGB_APP_SCRIPT = os.path.join(os.path.dirname(__file__), 'rgb_studio_gui.py')
+if getattr(sys, 'frozen', False):
+    APP_USER_DATA_DIR = os.path.dirname(os.path.abspath(sys.executable))
+    APP_BUNDLE_DIR = getattr(sys, '_MEIPASS', APP_USER_DATA_DIR)
+else:
+    APP_USER_DATA_DIR = os.path.dirname(os.path.abspath(__file__))
+    APP_BUNDLE_DIR = APP_USER_DATA_DIR
+
+LAST_THEME_FILE = os.path.join(APP_USER_DATA_DIR, 'last_theme.json')
+SCREEN_WORKSPACES_FILE = os.path.join(APP_USER_DATA_DIR, 'screen_workspaces.json')
+APP_SETTINGS_FILE = os.path.join(APP_USER_DATA_DIR, 'app_settings.json')
+PRESET_THEMES_DIR = os.path.join(APP_USER_DATA_DIR, 'themes')
+RGB_APP_SCRIPT = os.path.join(APP_BUNDLE_DIR, 'rgb_studio_gui.py')
 os.makedirs(PRESET_THEMES_DIR, exist_ok=True)
 
 _RESERVED_WIN_NAMES = {
@@ -489,8 +513,11 @@ def pil_to_pixmap(pil_img):
 def set_windows_autostart(enable=True):
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_ALL_ACCESS)
-        py_exe = get_python_exe()
-        app_cmd = f'"{py_exe}" "{os.path.abspath(__file__)}" --autostart'
+        if getattr(sys, 'frozen', False):
+            app_cmd = f'"{os.path.abspath(sys.executable)}" --autostart'
+        else:
+            py_exe = get_python_exe()
+            app_cmd = f'"{py_exe}" "{os.path.abspath(__file__)}" --autostart'
         if enable:
             winreg.SetValueEx(key, "CyberPulseLCDStudio", 0, winreg.REG_SZ, app_cmd)
         else:
@@ -2269,6 +2296,18 @@ class AppSettingsDialog(QDialog):
         self.chk_autostream.setChecked(bool(self.gui.app_settings.get('auto_stream_on_start', True)))
         grp_layout.addWidget(self.chk_autostream)
 
+        lang_row = QHBoxLayout()
+        lbl_lang = QLabel("🌐 Uygulama Dili / Language:")
+        lbl_lang.setStyleSheet("color: #dae2fd; font-size: 11px; font-weight: 700; border: none;")
+        lang_row.addWidget(lbl_lang)
+        self.combo_app_lang = QComboBox()
+        self.combo_app_lang.addItem("🇹🇷 Türkçe (Turkish)", "tr")
+        self.combo_app_lang.addItem("🇬🇧 English (İngilizce)", "en")
+        curr_lang = str(self.gui.app_settings.get('language', 'tr')).lower()
+        self.combo_app_lang.setCurrentIndex(1 if curr_lang == 'en' else 0)
+        lang_row.addWidget(self.combo_app_lang, stretch=1)
+        grp_layout.addLayout(lang_row)
+
         left_col.addWidget(grp_startup)
 
         grp_com, com_layout = make_stitch_settings_card("🔌 DONANIM VERİ YOLU & COM PORT BAĞLANTISI", "USB CDC")
@@ -2524,6 +2563,10 @@ class AppSettingsDialog(QDialog):
             self.gui.app_settings['start_minimized'] = self.chk_minimized.isChecked()
             self.gui.app_settings['auto_stream_on_start'] = self.chk_autostream.isChecked()
             self.gui.app_settings['selected_com_port'] = self.dialog_combo_port.currentData()
+            if hasattr(self, 'combo_app_lang'):
+                self.gui.app_settings['language'] = self.combo_app_lang.currentData()
+                if hasattr(self.gui, 'apply_current_language'):
+                    self.gui.apply_current_language()
             
             self.gui.app_settings['auto_rotate_themes'] = self.chk_auto_rotate.isChecked()
             self.gui.app_settings['rotate_val'] = self.spin_rotate_val.value()
@@ -3606,8 +3649,12 @@ class InteractiveCanvasWidget(QWidget):
             painter.setBrush(QBrush(QColor(56, 189, 248, 45)))
             painter.drawRect(self.rubber_band_rect)
 
-CHECKMARK_PNG = os.path.join(os.path.dirname(__file__), "checkmark.png")
-RADIO_PNG = os.path.join(os.path.dirname(__file__), "radio_checked.png")
+CHECKMARK_PNG = os.path.join(APP_BUNDLE_DIR, "checkmark.png")
+RADIO_PNG = os.path.join(APP_BUNDLE_DIR, "radio_checked.png")
+if not os.path.exists(CHECKMARK_PNG):
+    CHECKMARK_PNG = os.path.join(APP_USER_DATA_DIR, "checkmark.png")
+if not os.path.exists(RADIO_PNG):
+    RADIO_PNG = os.path.join(APP_USER_DATA_DIR, "radio_checked.png")
 
 def ensure_ui_icons():
     try:
@@ -4028,10 +4075,18 @@ class CyberPulseStudioGUI(QMainWindow):
             pass
 
         self.init_ui()
+        try:
+            app_inst = QApplication.instance()
+            if app_inst:
+                self._lang_event_filter = LanguageEventFilter(self)
+                app_inst.installEventFilter(self._lang_event_filter)
+        except Exception:
+            pass
         self.refresh_multi_screen_bar_ui()
         self.update_canvas_geometry()
         self.populate_com_ports()
         self.update_stream_status_ui()
+        self.apply_current_language()
         self.setup_system_tray()
         self.setup_global_hotkeys()
 
@@ -4301,7 +4356,7 @@ class CyberPulseStudioGUI(QMainWindow):
 
         bg = str(theme_dict.get('bg_path') or '').strip()
         t_name = _sanitize_theme_filename(str(theme_dict.get('name', '')).strip())
-        app_dir = os.path.dirname(os.path.abspath(__file__))
+        app_dir = APP_USER_DATA_DIR
         cptheme_cand = os.path.join(app_dir, 'themes', f"{t_name}.cptheme") if t_name else ''
 
         if bg and not _is_safe_local_file_path(bg):
@@ -5234,6 +5289,8 @@ class CyberPulseStudioGUI(QMainWindow):
                     self.lbl_port_status.setStyleSheet(
                         "background: rgba(0, 136, 93, 0.16); color: #4edea3; border: 1px solid rgba(78, 222, 163, 0.35); border-radius: 6px; padding: 4px 8px; font-weight: 800; font-size: 10px;"
                     )
+        if hasattr(self, 'apply_current_language'):
+            self.apply_current_language()
 
     def on_port_selection_changed(self, idx):
         if idx < 0 or not hasattr(self, 'combo_port'):
@@ -5433,6 +5490,29 @@ class CyberPulseStudioGUI(QMainWindow):
         """)
         ram_vbox.addWidget(self.bar_rail_ram)
         rail_vbox.addWidget(ram_card)
+
+        self.btn_rail_lang = QPushButton("🌐  Dil: TR | EN")
+        self.btn_rail_lang.setToolTip("Uygulama dilini değiştir (Türkçe / English)")
+        self.btn_rail_lang.setStyleSheet("""
+            QPushButton {
+                background: #060e20;
+                color: #7bd0ff;
+                border: 1px solid #1e293b;
+                border-radius: 6px;
+                padding: 7px 12px;
+                font-size: 11px;
+                font-weight: 800;
+                text-align: left;
+                letter-spacing: 0.3px;
+            }
+            QPushButton:hover {
+                background: #222a3d;
+                color: #ffffff;
+                border-color: #8083ff;
+            }
+        """)
+        self.btn_rail_lang.clicked.connect(self.toggle_app_language)
+        rail_vbox.addWidget(self.btn_rail_lang)
 
         btn_rail_prefs = QPushButton("⚙  Sistem Ayarları")
         btn_rail_prefs.setStyleSheet("""
@@ -6496,6 +6576,24 @@ class CyberPulseStudioGUI(QMainWindow):
         if hasattr(self, 'canvas_widget') and hasattr(self.canvas_widget, 'update_geometry_for_theme'):
             self.canvas_widget.update_geometry_for_theme()
 
+    def toggle_app_language(self):
+        curr = str(self.app_settings.get('language', 'tr')).lower()
+        new_lang = 'en' if curr == 'tr' else 'tr'
+        self.app_settings['language'] = new_lang
+        self.save_app_settings()
+        self.apply_current_language()
+
+    def apply_current_language(self):
+        try:
+            lang = str(self.app_settings.get('language', 'tr')).lower()
+            if hasattr(self, 'btn_rail_lang'):
+                lbl = "🌐  Language: EN 🇬🇧" if lang == 'en' else "🌐  Dil: TR 🇹🇷"
+                self.btn_rail_lang.setProperty("_cp_orig_tr_text", lbl)
+                self.btn_rail_lang.setText(lbl)
+            apply_language_to_widget_tree(self, lang)
+        except Exception as e:
+            print("apply_current_language note:", e)
+
     def apply_full_layout_to_all_themes(self):
         """
         🔄 Applies the current screen's elements and layout ONLY to saved preset themes that have
@@ -6864,6 +6962,8 @@ class CyberPulseStudioGUI(QMainWindow):
 
         if self.selected_element_idx is not None and 0 <= self.selected_element_idx < self.element_list.count():
             self.element_list.setCurrentRow(self.selected_element_idx)
+        if hasattr(self, 'apply_current_language'):
+            self.apply_current_language()
 
     def _sync_multi_selection_ids(self):
         els = self.theme_data.get('elements', [])
@@ -7693,6 +7793,8 @@ class CyberPulseStudioGUI(QMainWindow):
                 t_name = active_ws.get('theme_data', {}).get('name', 'Özel Tema')
                 if hasattr(self, 'lbl_center_ws_title'):
                     self.lbl_center_ws_title.setText(f"📺 {active_ws.get('title')}  •  🎨 {t_name}")
+            if hasattr(self, 'apply_current_language'):
+                self.apply_current_language()
         except Exception as e:
             print("refresh_multi_screen_bar_ui note:", e)
 
@@ -7818,6 +7920,8 @@ class CyberPulseStudioGUI(QMainWindow):
                     if hasattr(self, 'lbl_port_status'):
                         self.lbl_port_status.setText("🔴 Bağlı Değil")
                         self.lbl_port_status.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 12px; margin-right: 8px;")
+                        if hasattr(self, 'apply_current_language'):
+                            self.apply_current_language()
                     if silent_on_fail:
                         self.showNormal()
                         self.activateWindow()

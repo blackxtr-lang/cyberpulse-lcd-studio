@@ -156,7 +156,8 @@ class SensorMonitor:
         Eliminates 2.5s blocking PowerShell startup freeze!
         """
         import json
-        cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hardware_cache.json")
+        base_dir = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
+        cache_file = os.path.join(base_dir, "hardware_cache.json")
         try:
             if os.path.exists(cache_file):
                 with open(cache_file, 'r', encoding='utf-8') as f:
