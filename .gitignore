@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local user runtime configs & hardware caches (contain personal settings/paths)
+cyberpulse_studio/app_settings.json
+cyberpulse_studio/last_theme.json
+cyberpulse_studio/hardware_cache.json
+cyberpulse_studio/screen_workspaces.json
+
+# User preset themes & temporary files (large media bundles)
+cyberpulse_studio/themes/*.cptheme
+cyberpulse_studio/themes/*.json
+cyberpulse_studio/themes/*.png
+cyberpulse_studio/themes/*.mp4
+cyberpulse_studio/themes/*.gif
+cyberpulse_studio/themes/*.tmp
+cyberpulse_studio/themes/_legacy_backup/
+!cyberpulse_studio/themes/.gitkeep
+
+# Logs, shortcuts, and local backups
+*.log
+*.tmp
+*.lnk
+cyberpulse_studio/log_run.txt
+cyberpulse_studio/stdout.txt
+cyberpulse_studio/stderr.txt
+_backup_cyberpulse_studio_working/
+stitch_cyberpulse_lcd_studio.zip
+AGENTS.md
+
+# Local debug/helper scripts
+cyberpulse_studio/debug_test.py
+cyberpulse_studio/run_briefly.py
+cyberpulse_studio/fix_all_shortcuts.py
