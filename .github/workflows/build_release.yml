@@ -37,6 +37,7 @@ jobs:
             --add-data "cyberpulse_studio/cyberpulse.ico;." `
             --add-data "cyberpulse_studio/checkmark.png;." `
             --add-data "cyberpulse_studio/radio_checked.png;." `
+            --add-data "cyberpulse_studio/version.json;." `
             --hidden-import "i18n" `
             --hidden-import "case_screen_profiles" `
             --hidden-import "game_profile_manager" `
@@ -62,8 +63,8 @@ jobs:
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: "⚡ CyberPulse LCD Studio — Windows Portable (.exe)"
+          tag_name: v1.2.0
+          name: "⚡ CyberPulse LCD Studio v1.2.0 — Windows Portable (.exe)"
           body: |
             ## 🇹🇷 Türkçe — Kurulumsuz Taşınabilir Windows Sürümü (.exe)
             1. Aşağıdaki **`CyberPulse_Studio_Windows_x64.zip`** dosyasını indirin ve bir klasöre çıkartın.

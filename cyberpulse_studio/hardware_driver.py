@@ -1142,6 +1142,7 @@ class HardwareDriver:
                     s_id = el.get('sensorId') or 'cpu_temp'
                     val = str(sensor_metrics.get(s_id, '45%'))
 
+                    bar_pct_override = None
                     vector_icon_name = None
                     if s_id == 'net_down':
                         vector_icon_name = 'down'
@@ -1173,12 +1174,56 @@ class HardwareDriver:
                     elif s_id == 'cpu_fan':
                         vector_icon_name = 'fan'
                         display_metric = val if ('RPM' in val or '%' in val) else f"{val} RPM"
-                    elif s_id == 'ram_used':
+                    elif s_id in ('ram_used', 'ram_load', 'ram_free', 'ram_free_load', 'ram_used_both', 'ram_free_both'):
                         vector_icon_name = 'ram'
-                        display_metric = val if 'GB' in val else f"{val} GB"
-                    elif s_id == 'ram_load':
-                        vector_icon_name = 'ram'
-                        display_metric = val if '%' in val else f"{val}%"
+                        ram_mode = str(el.get('ramDisplayMode') or '').strip()
+                        if ram_mode not in ('used_gb', 'used_pct', 'used_both', 'free_gb', 'free_pct', 'free_both'):
+                            default_mode_map = {
+                                'ram_used': 'used_gb',
+                                'ram_load': 'used_pct',
+                                'ram_used_both': 'used_both',
+                                'ram_free': 'free_gb',
+                                'ram_free_load': 'free_pct',
+                                'ram_free_both': 'free_both',
+                            }
+                            ram_mode = default_mode_map.get(s_id, 'used_gb')
+
+                        raw_used_pct = sensor_metrics.get('_ram_used_pct_num')
+                        if raw_used_pct is None:
+                            try:
+                                raw_rl = str(sensor_metrics.get('ram_load', '50%')).replace('%', '').strip()
+                                raw_used_pct = max(0, min(100, int(round(float(raw_rl)))))
+                            except Exception:
+                                raw_used_pct = 50
+                        used_pct_num = max(0, min(100, int(raw_used_pct)))
+                        free_pct_num = max(0, min(100, int(sensor_metrics.get('_ram_free_pct_num', 100 - used_pct_num))))
+
+                        if ram_mode == 'used_gb':
+                            u_str = str(sensor_metrics.get('ram_used', val))
+                            display_metric = u_str if 'GB' in u_str else f"{u_str} GB"
+                            bar_pct_override = used_pct_num
+                        elif ram_mode == 'used_pct':
+                            display_metric = f"{used_pct_num}%"
+                            bar_pct_override = used_pct_num
+                        elif ram_mode == 'used_both':
+                            u_str = str(sensor_metrics.get('ram_used', '16.0 GB'))
+                            if 'GB' not in u_str:
+                                u_str = f"{u_str} GB"
+                            display_metric = str(sensor_metrics.get('ram_used_both') or f"{u_str} ({used_pct_num}%)")
+                            bar_pct_override = used_pct_num
+                        elif ram_mode == 'free_gb':
+                            f_str = str(sensor_metrics.get('ram_free', '8.0 GB'))
+                            display_metric = f_str if 'GB' in f_str else f"{f_str} GB"
+                            bar_pct_override = free_pct_num
+                        elif ram_mode == 'free_pct':
+                            display_metric = f"{free_pct_num}%"
+                            bar_pct_override = free_pct_num
+                        elif ram_mode == 'free_both':
+                            f_str = str(sensor_metrics.get('ram_free', '8.0 GB'))
+                            if 'GB' not in f_str:
+                                f_str = f"{f_str} GB"
+                            display_metric = str(sensor_metrics.get('ram_free_both') or f"{f_str} ({free_pct_num}%)")
+                            bar_pct_override = free_pct_num
                     elif s_id == 'disk_io':
                         vector_icon_name = 'disk'
                         display_metric = val if 'MB/s' in val else f"{val} MB/s"
@@ -1194,10 +1239,13 @@ class HardwareDriver:
                         display_metric = val if '%' in val else f"{val}%"
 
                     num_val = 50
-                    try:
-                        num_val = int(''.join(filter(str.isdigit, display_metric.split('.')[0])))
-                    except Exception:
-                        pass
+                    if bar_pct_override is not None:
+                        num_val = bar_pct_override
+                    else:
+                        try:
+                            num_val = int(''.join(filter(str.isdigit, display_metric.split('.')[0])))
+                        except Exception:
+                            pass
 
                     text_rgb = hex_to_rgb(el.get('textColor'), (255, 255, 255))
                     pct_rgb = hex_to_rgb(el.get('percentColor'), (56, 189, 248))
@@ -1305,12 +1353,19 @@ class HardwareDriver:
                             draw_img.line([(gx0, gy_line), (gx1, gy_line)], fill=(148, 163, 184, 45), width=1)
 
                         hist_dict = sensor_metrics.get('_history') or {}
-                        series = list(hist_dict.get(s_id, []))
+                        hist_key = s_id
+                        if s_id in ('ram_used', 'ram_load', 'ram_free', 'ram_free_load', 'ram_used_both', 'ram_free_both'):
+                            r_m = str(el.get('ramDisplayMode') or '').strip()
+                            if r_m in ('free_gb', 'free_pct', 'free_both') or s_id in ('ram_free', 'ram_free_load', 'ram_free_both'):
+                                hist_key = 'ram_free_load'
+                            else:
+                                hist_key = 'ram_load'
+                        series = list(hist_dict.get(hist_key, []))
                         if len(series) < 2:
                             series = [float(num_val)] * 20
 
                         # Determine dynamic or fixed range
-                        if s_id in ('cpu_load', 'gpu_load', 'ram_load', 'gpu_fan'):
+                        if hist_key in ('cpu_load', 'gpu_load', 'ram_load', 'ram_free_load', 'gpu_fan'):
                             lo_v, hi_v = 0.0, 100.0
                         elif s_id in ('cpu_temp', 'gpu_temp'):
                             lo_v, hi_v = 30.0, 95.0

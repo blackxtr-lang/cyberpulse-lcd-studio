@@ -65,8 +65,8 @@ except Exception as e:
 import io
 from PIL import Image, ImageDraw
 
-from PyQt5.QtCore import Qt, QTimer, QPoint, QRect, QSize, QThread, pyqtSignal, QDateTime, QObject, QEvent
-from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QBrush, QIcon, QCursor, QKeySequence, QFont
+from PyQt5.QtCore import Qt, QTimer, QPoint, QRect, QSize, QThread, pyqtSignal, QDateTime, QObject, QEvent, QUrl
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QBrush, QIcon, QCursor, QKeySequence, QFont, QDesktopServices
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QDialog, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QListWidget, QListWidgetItem, QSlider, QSpinBox,
@@ -138,7 +138,113 @@ SCREEN_WORKSPACES_FILE = os.path.join(APP_USER_DATA_DIR, 'screen_workspaces.json
 APP_SETTINGS_FILE = os.path.join(APP_USER_DATA_DIR, 'app_settings.json')
 PRESET_THEMES_DIR = os.path.join(APP_USER_DATA_DIR, 'themes')
 RGB_APP_SCRIPT = os.path.join(APP_BUNDLE_DIR, 'rgb_studio_gui.py')
+VERSION_FILE = os.path.join(APP_BUNDLE_DIR, 'version.json')
 os.makedirs(PRESET_THEMES_DIR, exist_ok=True)
+
+APP_VERSION = "1.2.0"
+try:
+    if os.path.isfile(VERSION_FILE) and os.path.getsize(VERSION_FILE) <= 16384:
+        with open(VERSION_FILE, 'r', encoding='utf-8') as _vf:
+            _vdata = json.load(_vf)
+            if isinstance(_vdata, dict) and _vdata.get('version'):
+                APP_VERSION = str(_vdata['version']).strip()[:20]
+except Exception:
+    pass
+
+SPONSOR_URL = "https://github.com/sponsors/blackxtr-lang"
+GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com/blackxtr-lang/cyberpulse-lcd-studio/main/cyberpulse_studio"
+_ALLOWED_UPDATE_FILES = (
+    "version.json",
+    "i18n.py",
+    "case_screen_profiles.py",
+    "game_profile_manager.py",
+    "sensor_monitor.py",
+    "hardware_driver.py",
+    "main_gui.py",
+)
+
+
+def _parse_semver_tuple(ver_str):
+    parts = re.findall(r'\d+', str(ver_str or '0.0.0'))
+    nums = [int(x) for x in parts[:4]]
+    while len(nums) < 3:
+        nums.append(0)
+    return tuple(nums)
+
+
+class AutoUpdateWorker(QThread):
+    """
+    🔄 Background Auto-Update Checker & Installer:
+    Checks GitHub (https://github.com/blackxtr-lang/cyberpulse-lcd-studio) on every startup over verified TLS.
+    If a newer version exists in version.json, automatically downloads and validates the updated modules
+    and notifies the main GUI to restart seamlessly.
+    """
+    update_result_signal = pyqtSignal(str, str, str)  # (status: 'updated'|'up_to_date'|'exe_update_available'|'error', remote_ver, message)
+    update_finished = update_result_signal
+
+    def __init__(self, silent=True, parent=None):
+        super().__init__(parent)
+        self.silent = bool(silent)
+
+    def run(self):
+        import ssl
+        import urllib.request
+        try:
+            ctx = ssl.create_default_context()
+            ver_url = f"{GITHUB_RAW_BASE_URL}/version.json?t={int(time.time())}"
+            req = urllib.request.Request(ver_url, headers={'User-Agent': f'CyberPulseStudio/{APP_VERSION}'})
+            with urllib.request.urlopen(req, context=ctx, timeout=5) as resp:
+                raw_json = resp.read(65536).decode('utf-8', errors='replace')
+            remote_meta = json.loads(raw_json)
+            if not isinstance(remote_meta, dict) or not remote_meta.get('version'):
+                if not self.silent:
+                    self.update_result_signal.emit('up_to_date', APP_VERSION, "Uygulamanız güncel.")
+                return
+
+            remote_ver = str(remote_meta.get('version')).strip()[:20]
+            if _parse_semver_tuple(remote_ver) <= _parse_semver_tuple(APP_VERSION):
+                if not self.silent:
+                    self.update_result_signal.emit('up_to_date', APP_VERSION, f"En güncel sürümü (v{APP_VERSION}) kullanıyorsunuz.")
+                return
+
+            # Newer version available! Download and verify whitelisted files atomically
+            if getattr(sys, 'frozen', False):
+                # For frozen .exe builds, notify and open the latest release page if auto-patch is locked by OS
+                self.update_result_signal.emit('exe_update_available', remote_ver, f"Yeni sürüm (v{remote_ver}) yayınlandı!")
+                return
+
+            staged_contents = {}
+            for fname in _ALLOWED_UPDATE_FILES:
+                f_url = f"{GITHUB_RAW_BASE_URL}/{fname}?t={int(time.time())}"
+                f_req = urllib.request.Request(f_url, headers={'User-Agent': f'CyberPulseStudio/{APP_VERSION}'})
+                with urllib.request.urlopen(f_req, context=ctx, timeout=8) as f_resp:
+                    data_bytes = f_resp.read(4 * 1024 * 1024)
+                if not data_bytes or len(data_bytes) < 10:
+                    raise RuntimeError(f"Eksik dosya verisi: {fname}")
+                text_content = data_bytes.decode('utf-8')
+                if fname.endswith('.py'):
+                    # 🔒 SECURITY & INTEGRITY: Verify Python syntax before touching disk
+                    compile(text_content, fname, 'exec')
+                elif fname.endswith('.json'):
+                    json.loads(text_content)
+                staged_contents[fname] = text_content
+
+            # Write all verified files atomically
+            for fname, text_content in staged_contents.items():
+                dest_path = os.path.join(APP_USER_DATA_DIR, fname)
+                tmp_path = dest_path + ".upd_tmp"
+                with open(tmp_path, 'w', encoding='utf-8', newline='\n') as wf:
+                    wf.write(text_content)
+                os.replace(tmp_path, dest_path)
+
+            self.update_result_signal.emit(
+                'updated',
+                remote_ver,
+                f"Yeni güncelleme (v{remote_ver}) otomatik olarak indirildi ve kuruldu!"
+            )
+        except Exception as e:
+            if not self.silent:
+                self.update_result_signal.emit('error', APP_VERSION, f"Güncelleme denetimi sırasında bağlantı kurulamadı: {e}")
 
 _RESERVED_WIN_NAMES = {
     'CON', 'PRN', 'AUX', 'NUL',
@@ -1539,6 +1645,8 @@ class ThemePresetManagerDialog(QDialog):
                     self.gui.hardware.set_resolution(int(self.gui.theme_data.get('width', 320)), int(self.gui.theme_data.get('height', 1480)))
 
                 self.gui.update_canvas_geometry()
+                if hasattr(self.gui, 'auto_adjust_window_to_canvas'):
+                    self.gui.auto_adjust_window_to_canvas()
                 self.gui.refresh_elements_list()
                 self.gui.save_theme_to_disk()
                 if hasattr(self.gui, 'refresh_multi_screen_bar_ui'):
@@ -2296,6 +2404,10 @@ class AppSettingsDialog(QDialog):
         self.chk_autostream.setChecked(bool(self.gui.app_settings.get('auto_stream_on_start', True)))
         grp_layout.addWidget(self.chk_autostream)
 
+        self.chk_auto_update = QCheckBox("🔄 Her Açılışta Güncellemeleri Otomatik Denetle ve Yükle")
+        self.chk_auto_update.setChecked(bool(self.gui.app_settings.get('auto_check_updates', True)))
+        grp_layout.addWidget(self.chk_auto_update)
+
         lang_row = QHBoxLayout()
         lbl_lang = QLabel("🌐 Uygulama Dili / Language:")
         lbl_lang.setStyleSheet("color: #dae2fd; font-size: 11px; font-weight: 700; border: none;")
@@ -2306,6 +2418,13 @@ class AppSettingsDialog(QDialog):
         curr_lang = str(self.gui.app_settings.get('language', 'tr')).lower()
         self.combo_app_lang.setCurrentIndex(1 if curr_lang == 'en' else 0)
         lang_row.addWidget(self.combo_app_lang, stretch=1)
+
+        btn_chk_upd = QPushButton("🔄 Güncelleme Denetle")
+        btn_chk_upd.setStyleSheet(
+            "background: #171f33; border: 1px solid #38bdf8; color: #38bdf8; font-weight: 800; padding: 5px 10px; border-radius: 6px;"
+        )
+        btn_chk_upd.clicked.connect(lambda: self.gui.start_update_check(silent=False))
+        lang_row.addWidget(btn_chk_upd)
         grp_layout.addLayout(lang_row)
 
         left_col.addWidget(grp_startup)
@@ -2562,6 +2681,8 @@ class AppSettingsDialog(QDialog):
             self.gui.app_settings['enable_tray'] = self.chk_tray.isChecked()
             self.gui.app_settings['start_minimized'] = self.chk_minimized.isChecked()
             self.gui.app_settings['auto_stream_on_start'] = self.chk_autostream.isChecked()
+            if hasattr(self, 'chk_auto_update'):
+                self.gui.app_settings['auto_check_updates'] = self.chk_auto_update.isChecked()
             self.gui.app_settings['selected_com_port'] = self.dialog_combo_port.currentData()
             if hasattr(self, 'combo_app_lang'):
                 self.gui.app_settings['language'] = self.combo_app_lang.currentData()
@@ -3287,18 +3408,18 @@ class InteractiveCanvasWidget(QWidget):
             theme_w = float(self.app.theme_data.get('width', 320))
             theme_h = float(self.app.theme_data.get('height', 1480))
 
-        # Fit smoothly inside the center stage viewport so selecting a 1080p/2K/4K monitor NEVER breaks or expands the UI panels
+        # Scale canvas proportionally to fill the available center stage viewport
         stage = getattr(self.app, 'canvas_stage', None)
-        if stage is not None and stage.isVisible() and stage.width() > 260 and stage.height() > 260:
-            max_w = max(320, min(680, stage.width() - 28))
-            max_h = max(320, min(680, stage.height() - 28))
+        if stage is not None and stage.width() > 120 and stage.height() > 120:
+            max_w = max(80, stage.width() - 20)
+            max_h = max(80, stage.height() - 20)
         else:
             max_w = 480
-            max_h = 560
+            max_h = 620
 
         scale = min(float(max_w) / max(1.0, theme_w), float(max_h) / max(1.0, theme_h))
-        canvas_w = max(80, int(round(theme_w * scale)))
-        canvas_h = max(80, int(round(theme_h * scale)))
+        canvas_w = max(60, int(round(theme_w * scale)))
+        canvas_h = max(60, int(round(theme_h * scale)))
 
         self.setFixedSize(canvas_w, canvas_h)
         self.scale_factor = float(canvas_w) / max(1.0, theme_w)
@@ -3999,8 +4120,9 @@ def get_cyberpulse_global_stylesheet():
 class CyberPulseStudioGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("⚡ CYBERPULSE LCD Studio (320x1480 v32.0 - Clean Stable Edition)")
-        self.resize(1450, 900)
+        self.setWindowTitle(f"⚡ CYBERPULSE LCD Studio v{APP_VERSION}")
+        self.setMinimumSize(900, 580)
+        self.resize(1100, 860)
         
         self.app_icon, self.app_pixmap = generate_cyberpulse_logo()
         self.setWindowIcon(self.app_icon)
@@ -4012,6 +4134,7 @@ class CyberPulseStudioGUI(QMainWindow):
             'enable_tray': True,
             'start_minimized': False,
             'auto_stream_on_start': True,
+            'auto_check_updates': True,
             'auto_rotate_themes': False,
             'rotate_val': 30,
             'rotate_unit': 'sec',
@@ -4083,6 +4206,7 @@ class CyberPulseStudioGUI(QMainWindow):
         except Exception:
             pass
         self.refresh_multi_screen_bar_ui()
+        self.auto_adjust_window_to_canvas()
         self.update_canvas_geometry()
         self.populate_com_ports()
         self.update_stream_status_ui()
@@ -4104,6 +4228,9 @@ class CyberPulseStudioGUI(QMainWindow):
 
         if self.app_settings.get('auto_stream_on_start', True):
             QTimer.singleShot(1000, self.auto_start_streaming)
+
+        if self.app_settings.get('auto_check_updates', True):
+            QTimer.singleShot(2200, lambda: self.start_update_check(silent=True))
 
         is_boot_autostart = ('--autostart' in sys.argv or '--minimized' in sys.argv)
         if is_boot_autostart and self.app_settings.get('start_minimized', False):
@@ -4874,6 +5001,7 @@ class CyberPulseStudioGUI(QMainWindow):
 
             if hasattr(self, 'update_undo_redo_ui'):
                 self.update_undo_redo_ui()
+            self.auto_adjust_window_to_canvas(tw, th)
             self.update_canvas_geometry()
             self.refresh_elements_list()
             if self.theme_data.get('elements'):
@@ -4905,9 +5033,12 @@ class CyberPulseStudioGUI(QMainWindow):
             new_w = int(t_json.get('width', 320))
             new_h = int(t_json.get('height', 1480))
 
-            # Keep this screen workspace's own target resolution (e.g. 1920x1080 or 320x1480) by adapting elements
-            if (prev_w, prev_h) != (new_w, new_h):
+            # During background auto-rotation, keep the screen's locked resolution;
+            # when explicitly selected by the user, switch to the theme's native canvas resolution!
+            if preserve_editor_if_inactive and (prev_w, prev_h) != (new_w, new_h):
                 adapt_theme_elements_to_resolution(t_json, prev_w, prev_h)
+            elif not preserve_editor_if_inactive:
+                ws['user_locked_resolution'] = True
 
             hw = ws.get('hardware')
             if hw:
@@ -5491,6 +5622,29 @@ class CyberPulseStudioGUI(QMainWindow):
         ram_vbox.addWidget(self.bar_rail_ram)
         rail_vbox.addWidget(ram_card)
 
+        self.btn_rail_coffee = QPushButton("☕  Bana Bir Kahve Ismarla")
+        self.btn_rail_coffee.setToolTip("Projeyi desteklemek için GitHub Sponsors sayfasını tarayıcıda açar")
+        self.btn_rail_coffee.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(245, 158, 11, 0.22), stop:1 rgba(217, 119, 6, 0.16));
+                color: #fbbf24;
+                border: 1px solid rgba(251, 191, 36, 0.45);
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 11px;
+                font-weight: 900;
+                text-align: left;
+                letter-spacing: 0.3px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #f59e0b, stop:1 #d97706);
+                color: #0b1326;
+                border-color: #fde68a;
+            }
+        """)
+        self.btn_rail_coffee.clicked.connect(self.open_buy_me_a_coffee)
+        rail_vbox.addWidget(self.btn_rail_coffee)
+
         self.btn_rail_lang = QPushButton("🌐  Dil: TR | EN")
         self.btn_rail_lang.setToolTip("Uygulama dilini değiştir (Türkçe / English)")
         self.btn_rail_lang.setStyleSheet("""
@@ -5759,6 +5913,8 @@ class CyberPulseStudioGUI(QMainWindow):
         # ───────────────────────────────────────────────────────────────────────────
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(8)
+        splitter.setChildrenCollapsible(False)
+        splitter.splitterMoved.connect(lambda _pos, _idx: self.update_canvas_geometry())
         self.main_splitter = splitter
 
         # ═══════════════════════════════════════════════════════════════════════════
@@ -5766,8 +5922,8 @@ class CyberPulseStudioGUI(QMainWindow):
         # ═══════════════════════════════════════════════════════════════════════════
         left_box = QFrame()
         left_box.setObjectName("stitchLeftColCard")
-        left_box.setMinimumWidth(295)
-        left_box.setMaximumWidth(355)
+        left_box.setMinimumWidth(265)
+        left_box.setMaximumWidth(345)
         left_box.setStyleSheet("""
             QFrame#stitchLeftColCard {
                 background-color: #131b2e;
@@ -5902,7 +6058,8 @@ class CyberPulseStudioGUI(QMainWindow):
             ("🔥 GPU Sıcaklığı", "gpu_temp", "sensor", "GPU Çekirdek", "#ffb4ab", "rgba(239,68,68,0.18)"),
             ("🎮 GPU Kullanımı (%)", "gpu_load", "sensor", "3D Motor Yükü", "#ffb4ab", "rgba(239,68,68,0.18)"),
             ("🌀 GPU Fan Hızı (%)", "gpu_fan", "sensor", "Soğutucu Fan", "#ffb4ab", "rgba(239,68,68,0.18)"),
-            ("💾 RAM Kullanımı (GB)", "ram_used", "sensor", "Sistem Belleği", "#c0c1ff", "rgba(128,131,255,0.18)"),
+            ("💾 RAM Kullanımı (GB)", "ram_used", "sensor", "Kullanılan Bellek", "#c0c1ff", "rgba(128,131,255,0.18)"),
+            ("💾 Kalan / Boş RAM (GB)", "ram_free", "sensor", "Kalan Boş Bellek", "#4edea3", "rgba(0,136,93,0.20)"),
             ("💿 Disk Okuma/Yazma (MB/s)", "disk_io", "sensor", "NVMe / SATA I/O", "#4edea3", "rgba(0,136,93,0.20)"),
             ("⏳ Sistem Açık Kalma Süresi", "system_uptime", "sensor", "Çalışma Süresi", "#908fa0", "rgba(144,143,160,0.16)"),
             ("📥 İndirme Hızı (Download)", "net_down", "sensor", "Canlı Ağ Akışı", "#4edea3", "rgba(0,136,93,0.20)"),
@@ -5935,6 +6092,8 @@ class CyberPulseStudioGUI(QMainWindow):
             "gpu_fan": "GPU FAN",
             "ram_used": "RAM",
             "ram_load": "RAM",
+            "ram_free": "BOŞ RAM",
+            "ram_free_load": "BOŞ RAM",
             "disk_io": "DİSK",
             "system_uptime": "AÇIK SÜRE",
             "net_down": "İNDİRME",
@@ -6021,7 +6180,7 @@ class CyberPulseStudioGUI(QMainWindow):
         self.center_box = QFrame()
         self.center_box.setObjectName("stitchCenterStageCard")
         center_box = self.center_box
-        center_box.setMinimumWidth(400)
+        center_box.setMinimumWidth(190)
         center_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         center_box.setStyleSheet("""
             QFrame#stitchCenterStageCard {
@@ -6104,8 +6263,8 @@ class CyberPulseStudioGUI(QMainWindow):
         # ═══════════════════════════════════════════════════════════════════════════
         right_box = QFrame()
         right_box.setObjectName("stitchRightColCard")
-        right_box.setMinimumWidth(345)
-        right_box.setMaximumWidth(420)
+        right_box.setMinimumWidth(315)
+        right_box.setMaximumWidth(410)
         right_box.setStyleSheet("""
             QFrame#stitchRightColCard {
                 background-color: #131b2e;
@@ -6311,6 +6470,8 @@ class CyberPulseStudioGUI(QMainWindow):
             ("🌀 GPU Fan Hızı (%)", "gpu_fan"),
             ("💾 RAM Kullanımı (GB)", "ram_used"),
             ("📊 RAM Kullanımı (%)", "ram_load"),
+            ("💾 Kalan / Boş RAM (GB)", "ram_free"),
+            ("📊 Kalan / Boş RAM (%)", "ram_free_load"),
             ("💿 Disk Okuma/Yazma (MB/s)", "disk_io"),
             ("⏳ Sistem Açık Kalma Süresi", "system_uptime"),
             ("📥 İndirme Hızı (Download)", "net_down"),
@@ -6325,6 +6486,27 @@ class CyberPulseStudioGUI(QMainWindow):
         self.combo_sensor_type.currentIndexChanged.connect(self.on_sensor_type_changed)
         sensor_type_layout.addWidget(self.combo_sensor_type)
         prop_layout.addWidget(self.widget_sensor_type)
+
+        # 1.2 RAM Display & Bar Sync Mode Selector (Visible when any RAM sensor is selected!)
+        self.widget_ram_mode = QWidget()
+        ram_mode_layout = QHBoxLayout(self.widget_ram_mode)
+        ram_mode_layout.setContentsMargins(0, 0, 0, 0)
+        ram_mode_layout.addWidget(QLabel("💾 RAM Gösterimi:"))
+        self.combo_ram_mode = QComboBox()
+        self.combo_ram_mode.setToolTip("RAM ögesinin ve ilerleme çubuğunun (bar) Kullanılan RAM'i mi yoksa Kalan/Boş RAM'i mi göstereceğini seçin")
+        ram_mode_options = [
+            ("Kullanılan RAM (GB) — Çubuk: Kullanılan %", "used_gb"),
+            ("Kullanılan RAM (%) — Çubuk: Kullanılan %", "used_pct"),
+            ("Kullanılan RAM (GB + %) — Çubuk: Kullanılan %", "used_both"),
+            ("Kalan / Boş RAM (GB) — Çubuk: Kalan %", "free_gb"),
+            ("Kalan / Boş RAM (%) — Çubuk: Kalan %", "free_pct"),
+            ("Kalan / Boş RAM (GB + %) — Çubuk: Kalan %", "free_both"),
+        ]
+        for rm_lbl, rm_key in ram_mode_options:
+            self.combo_ram_mode.addItem(rm_lbl, rm_key)
+        self.combo_ram_mode.currentIndexChanged.connect(self.on_ram_mode_changed)
+        ram_mode_layout.addWidget(self.combo_ram_mode, stretch=1)
+        prop_layout.addWidget(self.widget_ram_mode)
 
         # 1.5 Custom Image Layer Picker (Visible when custom_image is selected)
         self.widget_custom_image = QWidget()
@@ -6575,6 +6757,121 @@ class CyberPulseStudioGUI(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, 'canvas_widget') and hasattr(self.canvas_widget, 'update_geometry_for_theme'):
             self.canvas_widget.update_geometry_for_theme()
+
+    def auto_adjust_window_to_canvas(self, tw=None, th=None):
+        """
+        📐 Automatically adjusts the main studio window size to fit the currently selected
+        canvas resolution/aspect ratio (e.g. compact narrow window for 320x1480 vertical strip,
+        wider window for 1920x1080 landscape), while keeping the window freely resizable by hand.
+        """
+        try:
+            if tw is None:
+                tw = max(64, int(self.theme_data.get('width', 320)))
+            if th is None:
+                th = max(64, int(self.theme_data.get('height', 1480)))
+            ratio = float(tw) / max(1.0, float(th))
+
+            # Ideal window dimensions depending on canvas aspect ratio:
+            # Left rail (178) + Left panel (~290) + Right inspector (~335) + margins (~65) = ~870 px non-canvas width
+            if ratio <= 0.35:
+                # Tall vertical strip (e.g. 320x1480, 480x1920) -> compact width, tall height
+                target_w, target_h = 1060, 860
+            elif ratio < 0.85:
+                # Portrait 9:16 (e.g. 1080x1920) -> medium width, tall height
+                target_w, target_h = 1220, 860
+            elif ratio <= 1.25:
+                # Square-ish
+                target_w, target_h = 1280, 820
+            elif ratio <= 2.2:
+                # Standard 16:9 / 16:10 Landscape (e.g. 1920x1080, 1024x600, 800x480)
+                target_w, target_h = 1440, 820
+            else:
+                # Ultra-wide horizontal strip (e.g. 1920x480, 1280x400)
+                target_w, target_h = 1480, 740
+
+            screen = QApplication.primaryScreen()
+            if screen:
+                avail = screen.availableGeometry()
+                if avail.width() >= 1024 and avail.height() >= 720:
+                    target_w = min(target_w, max(920, avail.width() - 40))
+                    target_h = min(target_h, max(600, avail.height() - 40))
+
+            if not self.isMaximized() and not self.isFullScreen():
+                self.resize(int(target_w), int(target_h))
+
+            QTimer.singleShot(25, self.update_canvas_geometry)
+        except Exception as e:
+            print("auto_adjust_window_to_canvas note:", e)
+
+    def open_buy_me_a_coffee(self):
+        """☕ Opens the developer's GitHub Sponsors / Buy Me a Coffee support page in the user's browser."""
+        try:
+            QDesktopServices.openUrl(QUrl(SPONSOR_URL))
+        except Exception as e:
+            print("open_buy_me_a_coffee error:", e)
+
+    def start_update_check(self, silent=True):
+        """🔄 Checks GitHub for a newer version and automatically installs it if available."""
+        try:
+            if getattr(self, '_update_worker', None) is not None and self._update_worker.isRunning():
+                return
+            self._update_worker = AutoUpdateWorker(silent=silent, parent=self)
+            self._update_worker.update_result_signal.connect(
+                lambda status, remote_ver, msg, s=silent: self.on_auto_update_result(status, remote_ver, msg, s)
+            )
+            self._update_worker.start()
+        except Exception as e:
+            print("start_update_check note:", e)
+
+    def on_auto_update_result(self, status, remote_ver, msg, silent=True):
+        try:
+            lang = str(self.app_settings.get('language', 'tr')).lower()
+            if status == 'updated':
+                title = "✅ Otomatik Güncelleme Tamamlandı" if lang != 'en' else "✅ Auto-Update Installed"
+                body = (
+                    f"{msg}\n\nYeni sürümün (v{remote_ver}) etkinleşmesi için uygulama şimdi yeniden başlatılsın mı?"
+                    if lang != 'en' else
+                    f"{msg}\n\nWould you like to restart the application now to activate v{remote_ver}?"
+                )
+                ans = QMessageBox.question(self, title, body, QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+                if ans == QMessageBox.Yes:
+                    self.restart_application()
+            elif status == 'exe_update_available':
+                title = "🆕 Yeni Sürüm Mevcut" if lang != 'en' else "🆕 New Version Available"
+                body = (
+                    f"Yeni bir güncelleme (v{remote_ver}) yayınlandı!\n\nİndirme sayfasını şimdi açmak ister misiniz?"
+                    if lang != 'en' else
+                    f"A new update (v{remote_ver}) is available!\n\nWould you like to open the download page now?"
+                )
+                ans = QMessageBox.question(self, title, body, QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+                if ans == QMessageBox.Yes:
+                    QDesktopServices.openUrl(QUrl("https://github.com/blackxtr-lang/cyberpulse-lcd-studio/releases/latest"))
+            elif not silent:
+                if status == 'up_to_date':
+                    title = "✅ Güncel Sürüm" if lang != 'en' else "✅ Up to Date"
+                    QMessageBox.information(self, title, msg)
+                else:
+                    title = "⚠️ Güncelleme Denetimi" if lang != 'en' else "⚠️ Update Check"
+                    QMessageBox.warning(self, title, msg)
+        except Exception as e:
+            print("on_auto_update_result note:", e)
+
+    def restart_application(self):
+        """Safely saves state and restarts the application process after an auto-update."""
+        try:
+            self.save_theme_to_disk()
+            self.save_screen_workspaces_to_disk()
+            self.save_app_settings()
+            if getattr(sys, 'frozen', False):
+                exe_path = os.path.abspath(sys.executable)
+                subprocess.Popen([exe_path], cwd=os.path.dirname(exe_path))
+            else:
+                python_exe = os.path.abspath(sys.executable)
+                script_path = os.path.abspath(__file__)
+                subprocess.Popen([python_exe, script_path], cwd=os.path.dirname(script_path))
+            QApplication.quit()
+        except Exception as e:
+            print("restart_application error:", e)
 
     def toggle_app_language(self):
         curr = str(self.app_settings.get('language', 'tr')).lower()
@@ -7197,6 +7494,16 @@ class CyberPulseStudioGUI(QMainWindow):
         self.widget_weather_settings.setVisible(el_type == 'weather_widget')
         if hasattr(self, 'widget_custom_image'):
             self.widget_custom_image.setVisible(el_type == 'custom_image')
+        if hasattr(self, 'widget_ram_mode'):
+            curr_el = None
+            if self.selected_element_idx is not None and 0 <= self.selected_element_idx < len(self.theme_data.get('elements', [])):
+                curr_el = self.theme_data['elements'][self.selected_element_idx]
+            curr_sid = str((curr_el or {}).get('sensorId', ''))
+            is_ram_sensor = (
+                el_type in ['sensor', 'gauge', 'vertical_gauge', 'circle_gauge', 'animated_fan', 'sparkline_graph']
+                and curr_sid in ('ram_used', 'ram_load', 'ram_free', 'ram_free_load', 'ram_used_both', 'ram_free_both')
+            )
+            self.widget_ram_mode.setVisible(is_ram_sensor)
 
         if el_type == 'box':
             self.widget_sensor_type.setVisible(False)
@@ -7326,6 +7633,27 @@ class CyberPulseStudioGUI(QMainWindow):
         s_idx = self.combo_sensor_type.findData(current_sensor)
         if s_idx >= 0:
             self.combo_sensor_type.setCurrentIndex(s_idx)
+
+        if hasattr(self, 'combo_ram_mode'):
+            self.combo_ram_mode.blockSignals(True)
+            ram_mode = str(el.get('ramDisplayMode', '')).strip()
+            if not ram_mode:
+                if current_sensor == 'ram_load':
+                    ram_mode = 'used_pct'
+                elif current_sensor == 'ram_free':
+                    ram_mode = 'free_gb'
+                elif current_sensor == 'ram_free_load':
+                    ram_mode = 'free_pct'
+                elif current_sensor == 'ram_used_both':
+                    ram_mode = 'used_both'
+                elif current_sensor == 'ram_free_both':
+                    ram_mode = 'free_both'
+                else:
+                    ram_mode = 'used_gb'
+            rm_idx = self.combo_ram_mode.findData(ram_mode)
+            if rm_idx >= 0:
+                self.combo_ram_mode.setCurrentIndex(rm_idx)
+            self.combo_ram_mode.blockSignals(False)
 
         font_name = el.get('fontFamily', 'Arial')
         idx = self.combo_font.findText(font_name)
@@ -7469,8 +7797,66 @@ class CyberPulseStudioGUI(QMainWindow):
             new_sensor = self.combo_sensor_type.itemData(idx)
             el = self.theme_data['elements'][self.selected_element_idx]
             el['sensorId'] = new_sensor
+            if new_sensor == 'ram_used':
+                el['ramDisplayMode'] = 'used_gb'
+            elif new_sensor == 'ram_load':
+                el['ramDisplayMode'] = 'used_pct'
+            elif new_sensor == 'ram_free':
+                el['ramDisplayMode'] = 'free_gb'
+            self.load_element_properties(el)
             self.refresh_elements_list()
             self.save_theme_to_disk()
+
+    def on_ram_mode_changed(self, idx):
+        """Allows the user to choose whether a RAM widget displays Used vs Free RAM (GB, %, or Both) with matching bar fill."""
+        if self.selected_element_idx is not None and 0 <= self.selected_element_idx < len(self.theme_data['elements']):
+            if not hasattr(self, 'combo_ram_mode'):
+                return
+            mode = self.combo_ram_mode.itemData(idx)
+            if not mode:
+                return
+            self.push_undo_state("RAM Gösterim Modu Değiştir")
+            el = self.theme_data['elements'][self.selected_element_idx]
+            el['ramDisplayMode'] = mode
+            # Keep sensorId in sync for clarity & sparkline history
+            if mode == 'used_gb':
+                el['sensorId'] = 'ram_used'
+            elif mode == 'used_pct':
+                el['sensorId'] = 'ram_load'
+            elif mode == 'used_both':
+                el['sensorId'] = 'ram_used'
+            elif mode == 'free_gb':
+                el['sensorId'] = 'ram_free'
+            elif mode == 'free_pct':
+                el['sensorId'] = 'ram_free'
+            elif mode == 'free_both':
+                el['sensorId'] = 'ram_free'
+
+            # Auto-update default Turkish/English RAM label if the user hasn't customized it to something unrelated
+            curr_lbl = str(el.get('label', '')).strip()
+            default_ram_labels = {
+                'RAM Kullanımı (GB)', 'RAM Yükü (%)', 'Kalan / Boş RAM (GB)',
+                'RAM Kullanımı', 'Kalan RAM', 'Boş RAM', 'RAM Used (GB)', 'RAM Load (%)', 'Free RAM (GB)'
+            }
+            if curr_lbl in default_ram_labels:
+                if mode.startswith('free_'):
+                    el['label'] = 'Kalan / Boş RAM (GB)' if mode == 'free_gb' else 'Kalan RAM'
+                else:
+                    el['label'] = 'RAM Kullanımı (GB)' if mode == 'used_gb' else 'RAM Kullanımı'
+                self.txt_label.blockSignals(True)
+                self.txt_label.setText(el['label'])
+                self.txt_label.blockSignals(False)
+
+            self.combo_sensor_type.blockSignals(True)
+            s_idx = self.combo_sensor_type.findData(el['sensorId'])
+            if s_idx >= 0:
+                self.combo_sensor_type.setCurrentIndex(s_idx)
+            self.combo_sensor_type.blockSignals(False)
+
+            self.refresh_elements_list()
+            self.save_theme_to_disk()
+            if hasattr(self, 'canvas_widget'):
+                self.canvas_widget.update()
 
     def on_label_changed(self, text):
         if self.selected_element_idx is not None:
@@ -7865,6 +8251,7 @@ class CyberPulseStudioGUI(QMainWindow):
 
         self.hardware.reset_background_media()
         self.hardware.set_resolution(new_w, new_h)
+        self.auto_adjust_window_to_canvas(new_w, new_h)
         self.update_canvas_geometry()
 
         if self.selected_element_idx is not None and 0 <= self.selected_element_idx < len(self.theme_data.get('elements', [])):
@@ -7895,7 +8282,7 @@ class CyberPulseStudioGUI(QMainWindow):
             return
         t_name = self.combo_slot_quick_theme.itemData(idx)
         if t_name:
-            self.apply_preset_theme_to_slot(self.active_screen_slot_id, t_name)
+            self.apply_preset_theme_to_slot(self.active_screen_slot_id, t_name, preserve_editor_if_inactive=False)
 
     def auto_start_streaming(self):
         if not self.is_streaming:

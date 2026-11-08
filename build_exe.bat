@@ -34,6 +34,7 @@ echo [*] CyberPulse_Studio.exe derleniyor...
     --add-data "cyberpulse_studio\cyberpulse.ico;." ^
     --add-data "cyberpulse_studio\checkmark.png;." ^
     --add-data "cyberpulse_studio\radio_checked.png;." ^
+    --add-data "cyberpulse_studio\version.json;." ^
     --hidden-import "i18n" ^
     --hidden-import "case_screen_profiles" ^
     --hidden-import "game_profile_manager" ^

@@ -56,8 +56,12 @@ Python veya ek kütüphane kurmanıza gerek yoktur:
   - Aynı anda hem **USB Seri LCD (COM Port)** hem de **HDMI / DisplayPort** kasa ekranlarını bağımsız temalarla ve bağımsız çözünürlüklerle (`320×1480`, `480×1920`, `1280×400`, `1920×1080`, `2560×1440`, `3840×2160` veya özel boyut) yönetin.
 - **📊 30+ Canlı Donanım ve Medya Bileşeni:**
   - **CPU & GPU:** Sıcaklık, yük (%), frekans (MHz), fan devri (RPM/%).
-  - **Sistem & Ağ:** RAM kullanımı, NVMe/SATA disk okuma-yazma hızı, canlı indirme/yükleme (Download/Upload) hızı, canlı Ping monitörü ve 60 saniyelik Sparkline çizgi grafikleri.
+  - **Sistem & Ağ (Özelleştirilebilir RAM Modları):** RAM kullanımı (`Kullanılan GB`, `Kullanılan %`, `Kullanılan GB + %`, `Kalan/Boş GB`, `Kalan %`, `Kalan GB + %` — gösterilen değer ile ilerleme çubuğu her zaman birebir senkronize!), NVMe/SATA disk okuma-yazma hızı, canlı indirme/yükleme (Download/Upload) hızı, canlı Ping monitörü ve 60 saniyelik Sparkline çizgi grafikleri.
   - **Zengin Widget'lar:** RTSS/Win32 tabanlı oyun FPS sayacı, Windows SMTC canlı medya/YouTube Music kartı, otomatik konumlu hava durumu kartı, etkinlik geri sayım sayacı, dairesel/yatay/dikey göstergeler ve özelleştirilebilir kayan LED metin (Marquee).
+- **📐 Tuvale Göre Otomatik Pencere Boyutlandırma & Orantısal Ölçekleme:**
+  - Seçilen ekran tuvaline (`320×1480` dikey şerit veya `1920×1080` yatay ekran) göre pencere boyutu otomatik optimize edilir; pencereyi elle büyütüp küçülttüğünüzde canlı tuval de aynı oranda dinamik olarak ölçeklenir.
+- **🔄 Otomatik Güncelleme Sistemi:**
+  - Uygulama her açılışta GitHub üzerinden yeni sürüm kontrolü yapar ve yeni bir güncelleme varsa otomatik olarak indirip yükler.
 - **🎮 Otomatik Oyun Profili Bağlayıcı:**
   - Bilgisayarınızdaki Steam, Epic Games veya özel `.exe` oyunlarını istediğiniz temaya bağlayın. Oyun açıldığında kasa ekranınız otomatik olarak o oyunun temasına geçer, oyun kapandığında masaüstü temanıza geri döner.
 - **↻ Seçmeli Otomatik Tema Döngüsü (Playlist):**
@@ -93,8 +97,12 @@ No Python installation is required to run the standalone Windows build:
   - Drive both **USB Serial LCDs (COM Port)** and **HDMI / DisplayPort** case monitors simultaneously with independent themes and independent resolutions (`320×1480`, `480×1920`, `1280×400`, `1920×1080`, `2560×1440`, `3840×2160`, or custom dimensions).
 - **📊 30+ Live Hardware & Media Widgets:**
   - **CPU & GPU:** Temperature, load (%), clock frequency (MHz), fan speed (RPM/%).
-  - **System & Network:** RAM usage, NVMe/SATA disk read/write throughput, live download/upload speed, live Ping monitor, and 60-second Sparkline history graphs.
+  - **System & Network (Customizable RAM Modes):** RAM telemetry with 6 user-selectable modes (`Used GB`, `Used %`, `Used GB + %`, `Free GB`, `Free %`, `Free GB + %` — the progress bar always matches the displayed metric!), NVMe/SATA disk read/write throughput, live download/upload speed, live Ping monitor, and 60-second Sparkline history graphs.
   - **Rich Widgets:** RTSS/Win32 in-game FPS counter, Windows SMTC Now Playing / YouTube Music card, auto-location live weather card, event countdown timer, radial/horizontal/vertical gauges, and customizable scrolling LED ticker (Marquee).
+- **📐 Adaptive Window Sizing & Proportional Canvas Scaling:**
+  - Automatically adjusts the studio window to fit the active canvas aspect ratio (`320×1480` vertical strip vs `1920×1080` landscape), while allowing free manual window resizing with 100% proportional live canvas scaling.
+- **🔄 Automatic Startup Updater:**
+  - Automatically checks GitHub for updates on startup and installs new releases seamlessly.
 - **🎮 Automatic Game Profile Switcher:**
   - Bind any installed Steam, Epic Games, or custom `.exe` game to a specific theme. When the game launches, your case screen automatically switches to that game's theme and restores your desktop theme when the game exits.
 - **↻ Per-Screen Selective Auto-Rotation (Playlist):**

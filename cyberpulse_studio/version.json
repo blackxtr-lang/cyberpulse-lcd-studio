@@ -1,0 +1,13 @@
+{
+  "version": "1.2.0",
+  "channel": "stable",
+  "files": [
+    "version.json",
+    "i18n.py",
+    "case_screen_profiles.py",
+    "game_profile_manager.py",
+    "sensor_monitor.py",
+    "hardware_driver.py",
+    "main_gui.py"
+  ]
+}

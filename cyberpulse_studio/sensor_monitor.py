@@ -60,6 +60,12 @@ class SensorMonitor:
             'cpu_fan': '1040 RPM',
             'ram_load': '50%',
             'ram_used': '16.0 GB',
+            'ram_free': '16.0 GB',
+            'ram_free_load': '50%',
+            'ram_used_both': '16.0 GB (50%)',
+            'ram_free_both': '16.0 GB (50%)',
+            '_ram_used_pct_num': 50,
+            '_ram_free_pct_num': 50,
             'disk_io': '0.5 MB/s',
             'system_uptime': '01s 15dk',
             'game_fps': '0 FPS',
@@ -429,13 +435,17 @@ class SensorMonitor:
 
                 try:
                     vm = psutil.virtual_memory()
-                    ram_pct = int(round(vm.percent))
+                    total_ram_gb = max(1.0, round(vm.total / (1024**3), 1))
+                    ram_pct = max(0, min(100, int(round(vm.percent))))
                     ram_gb = round(vm.used / (1024**3), 1)
-                    self.cached_sensors['ram_load'] = f"{ram_pct}%"
-                    self.cached_sensors['ram_used'] = f"{ram_gb} GB"
+                    ram_free_gb = round(max(0.0, total_ram_gb - ram_gb), 1)
+                    ram_free_pct = max(0, min(100, 100 - ram_pct))
                 except Exception:
-                    ram_pct = 38
-                    ram_gb = 16.3
+                    total_ram_gb = 32.0
+                    ram_pct = 50
+                    ram_gb = 16.0
+                    ram_free_gb = 16.0
+                    ram_free_pct = 50
 
                 gpu_temp_val = 48
                 gpu_load_val = 0
@@ -485,7 +495,9 @@ class SensorMonitor:
                     if 'RAM usage' in ab_data:
                         ram_mb = ab_data['RAM usage']['val']
                         ram_gb = round(ram_mb / 1024.0, 1)
-                        self.cached_sensors['ram_used'] = f"{ram_gb} GB"
+                        ram_pct = max(0, min(100, int(round((ram_gb / max(1.0, total_ram_gb)) * 100.0))))
+                        ram_free_gb = round(max(0.0, total_ram_gb - ram_gb), 1)
+                        ram_free_pct = max(0, min(100, 100 - ram_pct))
 
                     cpu_clk_found = False
                     for key in ['CPU clock', 'CPU1 clock']:
@@ -535,6 +547,15 @@ class SensorMonitor:
                     offset = getattr(self, 'cpu_temp_offset', 0)
                     clean_cpu_temp = self._sanitize_cpu_temp(None, cpu_load=cpu_pct, gpu_temp=gpu_temp_val) + offset
                     self.cached_sensors['cpu_temp'] = f"{clean_cpu_temp}°C"
+
+                self.cached_sensors['ram_load'] = f"{ram_pct}%"
+                self.cached_sensors['ram_used'] = f"{ram_gb} GB"
+                self.cached_sensors['ram_free'] = f"{ram_free_gb} GB"
+                self.cached_sensors['ram_free_load'] = f"{ram_free_pct}%"
+                self.cached_sensors['ram_used_both'] = f"{ram_gb} GB ({ram_pct}%)"
+                self.cached_sensors['ram_free_both'] = f"{ram_free_gb} GB ({ram_free_pct}%)"
+                self.cached_sensors['_ram_used_pct_num'] = ram_pct
+                self.cached_sensors['_ram_free_pct_num'] = ram_free_pct
 
                 # CPU Fan RPM: Read from Afterburner if present, otherwise thermal curve
                 if ab_data and 'CPU fan speed' in ab_data and ab_data['CPU fan speed']['val'] > 0:
@@ -633,6 +654,8 @@ class SensorMonitor:
                     self._push_history('cpu_fan', cpu_fan_rpm)
                     self._push_history('ram_load', ram_pct)
                     self._push_history('ram_used', ram_gb)
+                    self._push_history('ram_free', ram_free_gb)
+                    self._push_history('ram_free_load', ram_free_pct)
                     self._push_history('disk_io', disk_mbs)
                     self._push_history('game_fps', fps_val)
                     self._push_history('net_down', down_mbs)
