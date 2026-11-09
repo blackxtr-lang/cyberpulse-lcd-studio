@@ -63,17 +63,31 @@ jobs:
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.0
-          name: "⚡ CyberPulse LCD Studio v1.2.0 — Windows Portable (.exe)"
+          tag_name: v1.3.0
+          name: "⚡ CyberPulse LCD Studio v1.3.0 — Windows Portable (.exe)"
           body: |
-            ## 🇹🇷 Türkçe — Kurulumsuz Taşınabilir Windows Sürümü (.exe)
+            ## 🇹🇷 Türkçe — Kurulumsuz Taşınabilir Windows Sürümü (.exe) — v1.3.0
+            ### ✨ Yenilikler (v1.3.0)
+            - **☕ Bana Bir Kahve Ismarla:** Sol menüye ve GitHub sayfasına doğrudan destek butonu eklendi.
+            - **📐 Tuvale Göre Otomatik Pencere Boyutlandırma & Esnek Paneller:** Seçilen ekran çözünürlüğüne (`320×1480` dikey şerit veya `1920×1080` yatay ekran) göre pencere otomatik boyutlanır; elle büyütüp küçültüldüğünde tuval ve yan paneller yazıları kesmeden orantılı ölçeklenir.
+            - **💾 Özelleştirilebilir RAM Gösterim Modları:** `Kullanılan GB`, `Kullanılan %`, `Kullanılan GB + %`, `Kalan/Boş GB`, `Kalan %`, `Kalan GB + %` seçenekleri eklendi; metin değeri ile altındaki ilerleme çubuğu her zaman birebir aynı oranı gösterir.
+            - **🔄 Otomatik Güncelleme Denetleyicisi:** Uygulama her açılışta GitHub üzerinden yeni sürümü denetler ve otomatik günceller.
+
+            ### 📥 Kurulumsuz Kullanım
             1. Aşağıdaki **`CyberPulse_Studio_Windows_x64.zip`** dosyasını indirin ve bir klasöre çıkartın.
             2. Klasör içindeki **`CyberPulse_Studio.exe`** dosyasına çift tıklayarak doğrudan çalıştırın (Python kurulumu gerektirmez).
             3. Sol menünün altındaki **`🌐 Dil: TR / EN`** butonuyla Türkçe ve İngilizce arasında anında geçiş yapabilirsiniz.
 
             ---
 
-            ## 🇬🇧 English — Portable Windows Release (.exe)
+            ## 🇬🇧 English — Portable Windows Release (.exe) — v1.3.0
+            ### ✨ What's New (v1.3.0)
+            - **☕ Buy Me a Coffee Button:** Added direct GitHub Sponsors support button in the left navigation rail and README.
+            - **📐 Adaptive Window Sizing & Unclipped Responsive Panels:** Window automatically adapts to the selected canvas resolution (`320×1480` portrait strip or `1920×1080` landscape) and scales proportionally without clipping any labels or controls.
+            - **💾 Customizable RAM Display Modes:** Choose between `Used GB`, `Used %`, `Used GB + %`, `Free GB`, `Free %`, and `Free GB + %` with 100% synchronized progress bars.
+            - **🔄 Automatic Startup Updater:** Checks GitHub on startup and installs updates automatically.
+
+            ### 📥 Quick Start
             1. Download **`CyberPulse_Studio_Windows_x64.zip`** below and extract it to any folder.
             2. Double-click **`CyberPulse_Studio.exe`** to launch immediately (no Python installation required).
             3. Switch between **English** and **Turkish** anytime using the **`🌐 Language: EN / TR`** button in the left sidebar.

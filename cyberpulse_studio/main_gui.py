@@ -141,7 +141,7 @@ RGB_APP_SCRIPT = os.path.join(APP_BUNDLE_DIR, 'rgb_studio_gui.py')
 VERSION_FILE = os.path.join(APP_BUNDLE_DIR, 'version.json')
 os.makedirs(PRESET_THEMES_DIR, exist_ok=True)
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 try:
     if os.path.isfile(VERSION_FILE) and os.path.getsize(VERSION_FILE) <= 16384:
         with open(VERSION_FILE, 'r', encoding='utf-8') as _vf:
