@@ -344,6 +344,10 @@ def get_custom_font(font_name='Arial', font_size=20, is_bold=False, is_italic=Fa
             font_path = os.path.join(fonts_dir, font_file)
             if os.path.exists(font_path):
                 font = ImageFont.truetype(font_path, int(font_size))
+                try:
+                    font._cp_meta = (font_family, int(font_size), bool(is_bold), bool(is_italic))
+                except Exception:
+                    pass
                 FONT_CACHE[key] = font
                 return font
         except Exception:
@@ -483,6 +487,23 @@ def draw_aligned_text(draw, font, text, rect_x, rect_y, rect_w, rect_h, fill, al
         icon_size = int(text_h * 1.1) if icon_name else 0
         total_w = text_w + (icon_size + 6 if icon_name else 0)
 
+        # Auto-fit font size down if text overflows rect_w so half of the text never gets cut off
+        avail_w = max(12, rect_w - 8)
+        meta = getattr(font, '_cp_meta', None)
+        if total_w > avail_w and meta:
+            fam, orig_sz, b_flag, i_flag = meta
+            scaled_sz = max(8, int(orig_sz * (avail_w / float(max(1, total_w)))))
+            while scaled_sz >= 8:
+                font = get_custom_font(fam, scaled_sz, b_flag, i_flag)
+                bbox = draw.textbbox((0, 0), text, font=font)
+                text_w = bbox[2] - bbox[0]
+                text_h = bbox[3] - bbox[1]
+                icon_size = int(text_h * 1.1) if icon_name else 0
+                total_w = text_w + (icon_size + 6 if icon_name else 0)
+                if total_w <= avail_w or scaled_sz <= 8:
+                    break
+                scaled_sz -= 1
+
         if align == 'center':
             start_x = rect_x + max(2, (rect_w - total_w) / 2.0)
         elif align == 'right':
@@ -497,6 +518,60 @@ def draw_aligned_text(draw, font, text, rect_x, rect_y, rect_w, rect_h, fill, al
             draw.text((int(start_x + icon_size + 6), y), text, fill=fill, font=font)
         else:
             draw.text((int(start_x), y), text, fill=fill, font=font)
+    except Exception:
+        pass
+
+
+def draw_label_and_value_row(draw, lbl_font, val_font, lbl_text, val_text, rect_x, rect_y, rect_w, rect_h, text_rgb, pct_rgb, icon_name=None):
+    """
+    Draws a left-aligned label (with optional vector icon) and a right-aligned value inside rect_w,
+    dynamically scaling down font sizes if their combined width exceeds rect_w so neither collides or clips.
+    """
+    try:
+        lbl_str = f"{lbl_text}:" if not str(lbl_text).endswith(':') else str(lbl_text)
+        lbbox = draw.textbbox((0, 0), lbl_str, font=lbl_font)
+        lw = lbbox[2] - lbbox[0]
+        lh = lbbox[3] - lbbox[1]
+        ic_sz = int(lh * 1.1) if icon_name else 0
+        l_tot = lw + (ic_sz + 6 if icon_name else 0)
+
+        vbbox = draw.textbbox((0, 0), val_text, font=val_font)
+        vw = vbbox[2] - vbbox[0]
+        vh = vbbox[3] - vbbox[1]
+
+        avail_w = max(24, rect_w - 12)
+        if l_tot + vw + 10 > avail_w:
+            l_meta = getattr(lbl_font, '_cp_meta', None)
+            v_meta = getattr(val_font, '_cp_meta', None)
+            scale = avail_w / float(max(1, l_tot + vw + 10))
+            for step in range(8):
+                fac = max(0.45, scale - step * 0.05)
+                if l_meta:
+                    lbl_font = get_custom_font(l_meta[0], max(8, int(l_meta[1] * fac)), l_meta[2], l_meta[3])
+                if v_meta:
+                    val_font = get_custom_font(v_meta[0], max(8, int(v_meta[1] * fac)), v_meta[2], v_meta[3])
+                lbbox = draw.textbbox((0, 0), lbl_str, font=lbl_font)
+                lw = lbbox[2] - lbbox[0]
+                lh = lbbox[3] - lbbox[1]
+                ic_sz = int(lh * 1.1) if icon_name else 0
+                l_tot = lw + (ic_sz + 6 if icon_name else 0)
+                vbbox = draw.textbbox((0, 0), val_text, font=val_font)
+                vw = vbbox[2] - vbbox[0]
+                vh = vbbox[3] - vbbox[1]
+                if l_tot + vw + 8 <= avail_w:
+                    break
+
+        ly = rect_y + max(2, (rect_h - lh) / 2.0)
+        lx = rect_x + 6
+        if icon_name:
+            draw_vector_icon(draw, icon_name, int(lx), int(ly + 1), size=ic_sz, color=text_rgb)
+            draw.text((int(lx + ic_sz + 6), ly), lbl_str, fill=text_rgb, font=lbl_font)
+        else:
+            draw.text((int(lx), ly), lbl_str, fill=text_rgb, font=lbl_font)
+
+        vy = rect_y + max(2, (rect_h - vh) / 2.0)
+        vx = max(rect_x + l_tot + 8, rect_x + rect_w - vw - 6)
+        draw.text((int(vx), vy), val_text, fill=pct_rgb, font=val_font)
     except Exception:
         pass
 
@@ -1335,8 +1410,7 @@ class HardwareDriver:
                         _draw_el_border()
                         hdr_h = max(18, min(el_h // 2, int(max(lbl_f_size, val_f_size) * 1.25)))
                         if lbl_text:
-                            draw_aligned_text(draw_img, lbl_font, lbl_text, el_x + 4, el_y + 2, el_w // 2, hdr_h, fill=text_rgb, align='left', icon_name=vector_icon_name)
-                            draw_aligned_text(draw_img, val_font, display_metric, el_x + el_w // 2, el_y + 2, el_w // 2 - 6, hdr_h, fill=pct_rgb, align='right')
+                            draw_label_and_value_row(draw_img, lbl_font, val_font, lbl_text, display_metric, el_x, el_y + 2, el_w, hdr_h, text_rgb, pct_rgb, icon_name=vector_icon_name)
                         else:
                             draw_aligned_text(draw_img, val_font, display_metric, el_x + 4, el_y + 2, el_w - 8, hdr_h, fill=pct_rgb, align='right', icon_name=vector_icon_name)
 
@@ -1452,8 +1526,7 @@ class HardwareDriver:
                     elif el_type == 'gauge':
                         _draw_el_border()
                         if lbl_text:
-                            draw_aligned_text(draw_img, lbl_font, f"{lbl_text}:", el_x, el_y, el_w // 2, el_h - 12, fill=text_rgb, align='left', icon_name=vector_icon_name)
-                            draw_aligned_text(draw_img, val_font, display_metric, el_x + el_w // 2, el_y, el_w // 2 - 4, el_h - 12, fill=pct_rgb, align='right')
+                            draw_label_and_value_row(draw_img, lbl_font, val_font, lbl_text, display_metric, el_x, el_y, el_w, el_h - 12, text_rgb, pct_rgb, icon_name=vector_icon_name)
                         else:
                             draw_aligned_text(draw_img, val_font, display_metric, el_x, el_y, el_w, el_h - 12, fill=pct_rgb, align='left', icon_name=vector_icon_name)
                         
@@ -1602,8 +1675,7 @@ class HardwareDriver:
                         if el_type == 'text':
                             draw_aligned_text(draw_img, val_font, lbl_text or "Özel Metin", el_x, el_y, el_w, el_h, fill=text_rgb, align=text_align)
                         elif lbl_text:
-                            draw_aligned_text(draw_img, lbl_font, f"{lbl_text}:", el_x, el_y, el_w // 2, el_h, fill=text_rgb, align='left', icon_name=vector_icon_name)
-                            draw_aligned_text(draw_img, val_font, display_metric, el_x + el_w // 2, el_y, el_w // 2 - 4, el_h, fill=pct_rgb, align='right')
+                            draw_label_and_value_row(draw_img, lbl_font, val_font, lbl_text, display_metric, el_x, el_y, el_w, el_h, text_rgb, pct_rgb, icon_name=vector_icon_name)
                         else:
                             draw_aligned_text(draw_img, val_font, display_metric, el_x, el_y, el_w, el_h, fill=pct_rgb, align=text_align, icon_name=vector_icon_name)
 

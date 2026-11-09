@@ -68,7 +68,7 @@ from PIL import Image, ImageDraw
 from PyQt5.QtCore import Qt, QTimer, QPoint, QRect, QSize, QThread, pyqtSignal, QDateTime, QObject, QEvent, QUrl
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QBrush, QIcon, QCursor, QKeySequence, QFont, QDesktopServices
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QDialog, QWidget, QVBoxLayout, QHBoxLayout,
+    QApplication, QMainWindow, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QListWidget, QListWidgetItem, QSlider, QSpinBox,
     QColorDialog, QFileDialog, QGroupBox, QLineEdit, QComboBox,
     QSplitter, QMessageBox, QFrame, QCheckBox, QSystemTrayIcon, QMenu, QAction, QInputDialog,
@@ -3424,8 +3424,7 @@ class InteractiveCanvasWidget(QWidget):
         self.setFixedSize(canvas_w, canvas_h)
         self.scale_factor = float(canvas_w) / max(1.0, theme_w)
         if hasattr(self.app, 'lbl_canvas_res_badge'):
-            orient_str = "Yatay" if theme_w > theme_h else ("Kare" if theme_w == theme_h else "Dikey")
-            self.app.lbl_canvas_res_badge.setText(f"📐 {int(theme_w)}×{int(theme_h)} ({orient_str})")
+            self.app.lbl_canvas_res_badge.setText(f"📐 {int(theme_w)}×{int(theme_h)}")
         self.update()
 
     def update_pixmap(self, pixmap):
@@ -4994,7 +4993,7 @@ class CyberPulseStudioGUI(QMainWindow):
 
             if hasattr(self, 'lbl_center_ws_title'):
                 t_name = self.theme_data.get('name', 'Özel Tema')
-                self.lbl_center_ws_title.setText(f"📺 {ws.get('title', slot_id)}  •  🎨 {t_name}")
+                self.lbl_center_ws_title.setText(f"🎨 {t_name}")
             elif hasattr(self, 'center_box') and hasattr(self.center_box, 'setTitle'):
                 t_name = self.theme_data.get('name', 'Özel Tema')
                 self.center_box.setTitle(f"📺 [{ws.get('title', slot_id)}] — {tw}×{th} Canlı Tuval (Tema: {t_name})")
@@ -5487,7 +5486,7 @@ class CyberPulseStudioGUI(QMainWindow):
         # Left Navigation Sidebar (ONLY Menu Location — Spans Full Height)
         nav_rail = QFrame()
         nav_rail.setObjectName("stitchNavRail")
-        nav_rail.setFixedWidth(215)
+        nav_rail.setFixedWidth(232)
         nav_rail.setStyleSheet("""
             QFrame#stitchNavRail {
                 background-color: #131b2e;
@@ -5496,7 +5495,7 @@ class CyberPulseStudioGUI(QMainWindow):
             }
         """)
         rail_vbox = QVBoxLayout(nav_rail)
-        rail_vbox.setContentsMargins(12, 14, 12, 12)
+        rail_vbox.setContentsMargins(10, 14, 10, 12)
         rail_vbox.setSpacing(6)
 
         # Clean App Brand Header at Top of Left Sidebar
@@ -5606,6 +5605,8 @@ class CyberPulseStudioGUI(QMainWindow):
         ram_top.addWidget(lbl_ram_title)
         ram_top.addStretch()
         self.lbl_rail_ram_val = QLabel("-- GB")
+        self.lbl_rail_ram_val.setMinimumWidth(68)
+        self.lbl_rail_ram_val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.lbl_rail_ram_val.setStyleSheet("color: #7bd0ff; font-family: 'Consolas', monospace; font-size: 10px; font-weight: 900; border: none; background: transparent;")
         ram_top.addWidget(self.lbl_rail_ram_val)
         ram_vbox.addLayout(ram_top)
@@ -5758,7 +5759,8 @@ class CyberPulseStudioGUI(QMainWindow):
         tp_lay.addWidget(lbl_target)
 
         self.combo_output_target = QComboBox()
-        self.combo_output_target.setStyleSheet("background: #131b2e; border: none; border-radius: 4px; padding: 2px 6px; color: #dae2fd; font-size: 11px; font-weight: 800; min-width: 115px;")
+        self.combo_output_target.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.combo_output_target.setStyleSheet("background: #131b2e; border: none; border-radius: 4px; padding: 2px 6px; color: #dae2fd; font-size: 11px; font-weight: 800;")
         self.combo_output_target.addItem("📟 Kasa LCD (USB)", "usb_serial")
         self.combo_output_target.addItem("🖥 Monitör (HDMI)", "hdmi_monitor")
         self.combo_output_target.addItem("⚡ Çift Çıkış (USB+HDMI)", "both")
@@ -5781,7 +5783,9 @@ class CyberPulseStudioGUI(QMainWindow):
         pp_lay.addWidget(lbl_port)
 
         self.combo_port = QComboBox()
-        self.combo_port.setStyleSheet("background: #131b2e; border: none; border-radius: 4px; padding: 2px 6px; color: #4edea3; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800; min-width: 105px;")
+        self.combo_port.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_port.setMinimumContentsLength(14)
+        self.combo_port.setStyleSheet("background: #131b2e; border: none; border-radius: 4px; padding: 2px 6px; color: #4edea3; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800;")
         self.combo_port.currentIndexChanged.connect(self.on_port_selection_changed)
         pp_lay.addWidget(self.combo_port)
 
@@ -5869,27 +5873,29 @@ class CyberPulseStudioGUI(QMainWindow):
         self.chk_slot_stream_enabled.stateChanged.connect(self.on_slot_stream_enabled_toggled)
         ms_row2.addWidget(self.chk_slot_stream_enabled)
 
-        lbl_slot_res = QLabel("📐 Ekran Çözünürlüğü:")
+        lbl_slot_res = QLabel("📐 Çözünürlük:")
         lbl_slot_res.setStyleSheet("color: #908fa0; font-weight: 800; font-size: 10px; border: none; background: transparent;")
         ms_row2.addWidget(lbl_slot_res)
 
         self.combo_slot_resolution = QComboBox()
-        self.combo_slot_resolution.setMinimumWidth(195)
+        self.combo_slot_resolution.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_slot_resolution.setMinimumContentsLength(18)
         self.combo_slot_resolution.setStyleSheet("background: #171f33; border: 1px solid #2d3449; border-radius: 5px; padding: 3px 8px; color: #dae2fd; font-size: 11px; font-weight: 800;")
         self.combo_slot_resolution.setToolTip("Seçili ekranın kendi tema tasarım çözünürlüğünü (örn. 1920×1080 Full HD, 320×1480, 2K, 4K veya Özel) belirler")
         self.combo_slot_resolution.currentIndexChanged.connect(self.on_slot_resolution_selected)
-        ms_row2.addWidget(self.combo_slot_resolution)
+        ms_row2.addWidget(self.combo_slot_resolution, stretch=1)
 
-        lbl_quick_t = QLabel("🎨 Bu Ekranın Teması:")
+        lbl_quick_t = QLabel("🎨 Tema:")
         lbl_quick_t.setStyleSheet("color: #908fa0; font-weight: 800; font-size: 10px; border: none; background: transparent;")
         ms_row2.addWidget(lbl_quick_t)
 
         self.combo_slot_quick_theme = QComboBox()
-        self.combo_slot_quick_theme.setMinimumWidth(200)
+        self.combo_slot_quick_theme.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_slot_quick_theme.setMinimumContentsLength(16)
         self.combo_slot_quick_theme.setStyleSheet("background: #171f33; border: 1px solid #2d3449; border-radius: 5px; padding: 3px 8px; color: #dae2fd; font-size: 11px; font-weight: 800;")
         self.combo_slot_quick_theme.setToolTip("Yalnızca seçili ekran için hızlıca farklı bir .cptheme teması yükler (Çözünürlüğe göre gruplanmıştır)")
         self.combo_slot_quick_theme.currentIndexChanged.connect(self.on_slot_quick_theme_selected)
-        ms_row2.addWidget(self.combo_slot_quick_theme)
+        ms_row2.addWidget(self.combo_slot_quick_theme, stretch=1)
 
         self.chk_slot_auto_rotate = QCheckBox("Oto Döngü")
         self.chk_slot_auto_rotate.setToolTip("Bu ekranda seçili temaların otomatik olarak sırayla/rastgele değişmesini açar/kapatır")
@@ -5897,9 +5903,7 @@ class CyberPulseStudioGUI(QMainWindow):
         self.chk_slot_auto_rotate.stateChanged.connect(self.on_slot_auto_rotate_toggled)
         ms_row2.addWidget(self.chk_slot_auto_rotate)
 
-        ms_row2.addStretch()
-
-        btn_clone_scr = QPushButton("📋 Başka Ekrandan Kopyala")
+        btn_clone_scr = QPushButton("📋 Kopyala")
         btn_clone_scr.setToolTip("Başka bir ekranın özel temasını bu ekrana kopyalar ve boyuta uyarlar")
         btn_clone_scr.setStyleSheet("background: #171f33; border: 1px solid #2d3449; color: #c7c4d7; border-radius: 5px; padding: 3px 9px; font-size: 11px; font-weight: 700;")
         btn_clone_scr.clicked.connect(self.clone_theme_from_another_screen)
@@ -5922,8 +5926,7 @@ class CyberPulseStudioGUI(QMainWindow):
         # ═══════════════════════════════════════════════════════════════════════════
         left_box = QFrame()
         left_box.setObjectName("stitchLeftColCard")
-        left_box.setMinimumWidth(265)
-        left_box.setMaximumWidth(345)
+        left_box.setMinimumWidth(310)
         left_box.setStyleSheet("""
             QFrame#stitchLeftColCard {
                 background-color: #131b2e;
@@ -6113,7 +6116,7 @@ class CyberPulseStudioGUI(QMainWindow):
                 "type": s_type,
                 "search_title": f"{label} {sub_desc}"
             })
-            item.setSizeHint(QSize(250, 48))
+            item.setSizeHint(QSize(260, 50))
             self.sensor_list.addItem(item)
 
             # Build Stitch Sensor Module Card Widget (#171f33)
@@ -6134,20 +6137,20 @@ class CyberPulseStudioGUI(QMainWindow):
                 }
             """)
             sc_lay = QHBoxLayout(s_card)
-            sc_lay.setContentsMargins(8, 5, 8, 5)
-            sc_lay.setSpacing(8)
+            sc_lay.setContentsMargins(7, 4, 7, 4)
+            sc_lay.setSpacing(6)
 
             ic_lbl = QLabel(icon_ch)
-            ic_lbl.setFixedSize(28, 28)
+            ic_lbl.setFixedSize(26, 26)
             ic_lbl.setAlignment(Qt.AlignCenter)
-            ic_lbl.setStyleSheet(f"background: {icon_bg}; color: {accent_fg}; border-radius: 6px; font-size: 13px; border: none;")
+            ic_lbl.setStyleSheet(f"background: {icon_bg}; color: {accent_fg}; border-radius: 6px; font-size: 12px; border: none;")
             sc_lay.addWidget(ic_lbl)
 
             txt_stack = QVBoxLayout()
             txt_stack.setContentsMargins(0, 0, 0, 0)
             txt_stack.setSpacing(1)
             t_lbl = QLabel(clean_title)
-            t_lbl.setStyleSheet("color: #dae2fd; font-size: 11px; font-weight: 800; border: none; background: transparent;")
+            t_lbl.setStyleSheet("color: #dae2fd; font-size: 10px; font-weight: 800; border: none; background: transparent;")
             sub_lbl = QLabel(sub_desc)
             sub_lbl.setStyleSheet("color: #908fa0; font-size: 9px; font-weight: 700; border: none; background: transparent;")
             txt_stack.addWidget(t_lbl)
@@ -6155,8 +6158,10 @@ class CyberPulseStudioGUI(QMainWindow):
             sc_lay.addLayout(txt_stack, stretch=1)
 
             val_badge = QLabel("WIDGET" if s_type not in ("sensor", "time", "date") else "--")
+            val_badge.setMinimumWidth(74)
+            val_badge.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             val_badge.setStyleSheet(
-                f"color: {accent_fg}; font-family: 'Consolas', monospace; font-size: 10px; font-weight: 900; border: none; background: transparent;"
+                f"color: {accent_fg}; font-family: 'Consolas', monospace; font-size: 9px; font-weight: 900; border: none; background: transparent;"
             )
             sc_lay.addWidget(val_badge)
             self._sensor_card_value_labels.append((s_id, s_type, val_badge))
@@ -6180,7 +6185,7 @@ class CyberPulseStudioGUI(QMainWindow):
         self.center_box = QFrame()
         self.center_box.setObjectName("stitchCenterStageCard")
         center_box = self.center_box
-        center_box.setMinimumWidth(190)
+        center_box.setMinimumWidth(360)
         center_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         center_box.setStyleSheet("""
             QFrame#stitchCenterStageCard {
@@ -6213,7 +6218,7 @@ class CyberPulseStudioGUI(QMainWindow):
         self.btn_redo.clicked.connect(self.redo_action)
         canvas_toolbar.addWidget(self.btn_redo)
 
-        self.chk_snap_guides = QCheckBox("⊞ MIKNATIS [AÇIK]")
+        self.chk_snap_guides = QCheckBox("⊞ Mıknatıs")
         self.chk_snap_guides.setChecked(True)
         self.chk_snap_guides.setToolTip("Sürüklerken tuval merkezine ve diğer ögelere otomatik hizala (Alt tuşu ile geçici devre dışı bırakılır)")
         self.chk_snap_guides.setStyleSheet("color: #7bd0ff; font-weight: 800; font-size: 10px; border: none; background: transparent;")
@@ -6222,7 +6227,7 @@ class CyberPulseStudioGUI(QMainWindow):
 
         canvas_toolbar.addStretch()
 
-        self.lbl_center_ws_title = QLabel(f"📺 {self.get_active_screen_title()}  •  🎨 {self.theme_data.get('name', 'Özel')}")
+        self.lbl_center_ws_title = QLabel(f"🎨 {self.theme_data.get('name', 'Özel')}")
         self.lbl_center_ws_title.setStyleSheet("color: #908fa0; font-size: 11px; font-weight: 800; border: none; background: transparent;")
         canvas_toolbar.addWidget(self.lbl_center_ws_title)
 
@@ -6263,8 +6268,7 @@ class CyberPulseStudioGUI(QMainWindow):
         # ═══════════════════════════════════════════════════════════════════════════
         right_box = QFrame()
         right_box.setObjectName("stitchRightColCard")
-        right_box.setMinimumWidth(315)
-        right_box.setMaximumWidth(410)
+        right_box.setMinimumWidth(355)
         right_box.setStyleSheet("""
             QFrame#stitchRightColCard {
                 background-color: #131b2e;
@@ -6459,6 +6463,8 @@ class CyberPulseStudioGUI(QMainWindow):
         sensor_type_layout.setContentsMargins(0, 0, 0, 0)
         sensor_type_layout.addWidget(QLabel("Bağlı Sensör:"))
         self.combo_sensor_type = QComboBox()
+        self.combo_sensor_type.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_sensor_type.setMinimumContentsLength(14)
         sensor_options = [
             ("🎮 FPS Göstergesi", "game_fps"),
             ("🌡️ CPU Sıcaklığı", "cpu_temp"),
@@ -6484,7 +6490,7 @@ class CyberPulseStudioGUI(QMainWindow):
         for s_lbl, s_key in sensor_options:
             self.combo_sensor_type.addItem(s_lbl, s_key)
         self.combo_sensor_type.currentIndexChanged.connect(self.on_sensor_type_changed)
-        sensor_type_layout.addWidget(self.combo_sensor_type)
+        sensor_type_layout.addWidget(self.combo_sensor_type, stretch=1)
         prop_layout.addWidget(self.widget_sensor_type)
 
         # 1.2 RAM Display & Bar Sync Mode Selector (Visible when any RAM sensor is selected!)
@@ -6493,6 +6499,8 @@ class CyberPulseStudioGUI(QMainWindow):
         ram_mode_layout.setContentsMargins(0, 0, 0, 0)
         ram_mode_layout.addWidget(QLabel("💾 RAM Gösterimi:"))
         self.combo_ram_mode = QComboBox()
+        self.combo_ram_mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_ram_mode.setMinimumContentsLength(14)
         self.combo_ram_mode.setToolTip("RAM ögesinin ve ilerleme çubuğunun (bar) Kullanılan RAM'i mi yoksa Kalan/Boş RAM'i mi göstereceğini seçin")
         ram_mode_options = [
             ("Kullanılan RAM (GB) — Çubuk: Kullanılan %", "used_gb"),
@@ -6513,7 +6521,7 @@ class CyberPulseStudioGUI(QMainWindow):
         custom_img_layout = QHBoxLayout(self.widget_custom_image)
         custom_img_layout.setContentsMargins(0, 0, 0, 0)
         self.btn_pick_custom_image = QPushButton("🖼️ Özel Görsel / Logo Seç (PNG / WebP / JPG)")
-        self.btn_pick_custom_image.setStyleSheet("background: #6366f1; color: white; font-weight: bold; padding: 6px;")
+        self.btn_pick_custom_image.setStyleSheet("background: #6366f1; color: white; font-weight: bold; padding: 5px 8px; font-size: 11px;")
         self.btn_pick_custom_image.clicked.connect(self.pick_custom_image_layer)
         custom_img_layout.addWidget(self.btn_pick_custom_image)
         prop_layout.addWidget(self.widget_custom_image)
@@ -6526,50 +6534,56 @@ class CyberPulseStudioGUI(QMainWindow):
         txt_lbl_layout.addWidget(self.lbl_txt_title)
         self.txt_label = QLineEdit()
         self.txt_label.textChanged.connect(self.on_label_changed)
-        txt_lbl_layout.addWidget(self.txt_label)
+        txt_lbl_layout.addWidget(self.txt_label, stretch=1)
         prop_layout.addWidget(self.widget_txt_lbl)
 
-        # 2.5 Exact Pixel Coordinates & Dimensions (X, Y, W, H — supports up to 4K 4096px)
+        # 2.5 Exact Pixel Coordinates & Dimensions (X, Y, W, H — 2x2 Grid so spinboxes never clip)
         self.widget_geom_controls = QWidget()
-        geom_layout = QHBoxLayout(self.widget_geom_controls)
+        geom_layout = QGridLayout(self.widget_geom_controls)
         geom_layout.setContentsMargins(0, 0, 0, 0)
-        geom_layout.setSpacing(4)
-        geom_layout.addWidget(QLabel("X:"))
+        geom_layout.setHorizontalSpacing(6)
+        geom_layout.setVerticalSpacing(4)
+        geom_layout.addWidget(QLabel("X:"), 0, 0)
         self.spin_el_x = QSpinBox()
         self.spin_el_x.setRange(0, 4096)
         self.spin_el_x.valueChanged.connect(self.on_element_geom_spin_changed)
-        geom_layout.addWidget(self.spin_el_x)
+        geom_layout.addWidget(self.spin_el_x, 0, 1)
 
-        geom_layout.addWidget(QLabel("Y:"))
+        geom_layout.addWidget(QLabel("Y:"), 0, 2)
         self.spin_el_y = QSpinBox()
         self.spin_el_y.setRange(0, 4096)
         self.spin_el_y.valueChanged.connect(self.on_element_geom_spin_changed)
-        geom_layout.addWidget(self.spin_el_y)
+        geom_layout.addWidget(self.spin_el_y, 0, 3)
 
-        geom_layout.addWidget(QLabel("G:"))
+        geom_layout.addWidget(QLabel("G:"), 1, 0)
         self.spin_el_w = QSpinBox()
         self.spin_el_w.setRange(20, 4096)
         self.spin_el_w.valueChanged.connect(self.on_element_geom_spin_changed)
-        geom_layout.addWidget(self.spin_el_w)
+        geom_layout.addWidget(self.spin_el_w, 1, 1)
 
-        geom_layout.addWidget(QLabel("Yük:"))
+        geom_layout.addWidget(QLabel("Yük:"), 1, 2)
         self.spin_el_h = QSpinBox()
         self.spin_el_h.setRange(16, 4096)
         self.spin_el_h.valueChanged.connect(self.on_element_geom_spin_changed)
-        geom_layout.addWidget(self.spin_el_h)
+        geom_layout.addWidget(self.spin_el_h, 1, 3)
+        geom_layout.setColumnStretch(1, 1)
+        geom_layout.setColumnStretch(3, 1)
         prop_layout.addWidget(self.widget_geom_controls)
 
         # 3. Font Family & Size
         self.widget_font_controls = QWidget()
         font_ctrl_layout = QVBoxLayout(self.widget_font_controls)
         font_ctrl_layout.setContentsMargins(0, 0, 0, 0)
+        font_ctrl_layout.setSpacing(4)
 
         font_box = QHBoxLayout()
         font_box.addWidget(QLabel("Font Ailesi:"))
         self.combo_font = QComboBox()
+        self.combo_font.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_font.setMinimumContentsLength(12)
         self.combo_font.addItems(["Arial", "Segoe UI", "Consolas", "Impact", "Times New Roman", "Courier New", "Verdana", "Trebuchet MS"])
         self.combo_font.currentIndexChanged.connect(self.on_font_changed)
-        font_box.addWidget(self.combo_font)
+        font_box.addWidget(self.combo_font, stretch=1)
         font_ctrl_layout.addLayout(font_box)
 
         style_box = QHBoxLayout()
@@ -6580,97 +6594,117 @@ class CyberPulseStudioGUI(QMainWindow):
         self.chk_italic = QCheckBox("İtalik")
         self.chk_italic.stateChanged.connect(self.on_style_changed)
         style_box.addWidget(self.chk_italic)
+        style_box.addStretch()
 
         font_ctrl_layout.addLayout(style_box)
 
         size_box = QHBoxLayout()
+        size_box.setSpacing(6)
         size_box.addWidget(QLabel("Etiket:"))
         self.spin_fsize = QSpinBox()
         self.spin_fsize.setRange(8, 250)
         self.spin_fsize.valueChanged.connect(self.on_fsize_changed)
-        size_box.addWidget(self.spin_fsize)
+        size_box.addWidget(self.spin_fsize, stretch=1)
 
         size_box.addWidget(QLabel("Değer:"))
         self.spin_val_fsize = QSpinBox()
         self.spin_val_fsize.setRange(8, 250)
         self.spin_val_fsize.valueChanged.connect(self.on_val_fsize_changed)
-        size_box.addWidget(self.spin_val_fsize)
+        size_box.addWidget(self.spin_val_fsize, stretch=1)
+        font_ctrl_layout.addLayout(size_box)
 
-        size_box.addWidget(QLabel("Hiza:"))
+        align_row = QHBoxLayout()
+        align_row.setSpacing(6)
+        align_row.addWidget(QLabel("Hiza:"))
         self.combo_align = QComboBox()
+        self.combo_align.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_align.setMinimumContentsLength(10)
         self.combo_align.addItems(["Sol (left)", "Orta (center)", "Sağ (right)"])
         self.combo_align.currentIndexChanged.connect(self.on_align_changed)
-        size_box.addWidget(self.combo_align)
-        font_ctrl_layout.addLayout(size_box)
+        align_row.addWidget(self.combo_align, stretch=1)
+        font_ctrl_layout.addLayout(align_row)
 
         prop_layout.addWidget(self.widget_font_controls)
 
-        # 3.5 Border Visibility, Corner Radius & Neon Glow Option
+        # 3.5 Border Visibility, Corner Radius & Neon Glow Option (2 rows so checkboxes & spinbox never clip)
         self.widget_border_option = QWidget()
-        border_opt_layout = QHBoxLayout(self.widget_border_option)
-        border_opt_layout.setContentsMargins(0, 0, 0, 0)
+        border_opt_vbox = QVBoxLayout(self.widget_border_option)
+        border_opt_vbox.setContentsMargins(0, 0, 0, 0)
+        border_opt_vbox.setSpacing(4)
+        border_opt_row1 = QHBoxLayout()
+        border_opt_row1.setSpacing(8)
         self.chk_border = QCheckBox("🔲 Çerçeve")
         self.chk_border.stateChanged.connect(self.on_style_changed)
-        border_opt_layout.addWidget(self.chk_border)
+        border_opt_row1.addWidget(self.chk_border)
 
         self.chk_glow = QCheckBox("✨ Neon Glow")
         self.chk_glow.setToolTip("Kutu etrafına yumuşak neon ışık halesi ekler")
         self.chk_glow.stateChanged.connect(self.on_style_changed)
-        border_opt_layout.addWidget(self.chk_glow)
+        border_opt_row1.addWidget(self.chk_glow)
+        border_opt_row1.addStretch()
+        border_opt_vbox.addLayout(border_opt_row1)
 
-        border_opt_layout.addWidget(QLabel("Köşe:"))
+        border_opt_row2 = QHBoxLayout()
+        border_opt_row2.setSpacing(6)
+        border_opt_row2.addWidget(QLabel("Köşe Yuvarlatma:"))
         self.spin_corner_radius = QSpinBox()
         self.spin_corner_radius.setRange(0, 60)
         self.spin_corner_radius.setSuffix(" px")
         self.spin_corner_radius.setToolTip("Kutu ve çerçeve köşelerini yuvarlatır (0 = Keskin)")
         self.spin_corner_radius.valueChanged.connect(self.on_corner_radius_changed)
-        border_opt_layout.addWidget(self.spin_corner_radius)
+        border_opt_row2.addWidget(self.spin_corner_radius, stretch=1)
+        border_opt_vbox.addLayout(border_opt_row2)
         prop_layout.addWidget(self.widget_border_option)
 
         # 4. Color Buttons
         self.widget_colors = QWidget()
         color_layout = QHBoxLayout(self.widget_colors)
         color_layout.setContentsMargins(0, 0, 0, 0)
-        self.btn_txt_col = QPushButton("🎨 Yazı Renk")
+        color_layout.setSpacing(4)
+        self.btn_txt_col = QPushButton("🎨 Yazı")
         self.btn_txt_col.clicked.connect(self.pick_text_color)
-        color_layout.addWidget(self.btn_txt_col)
+        color_layout.addWidget(self.btn_txt_col, stretch=1)
 
-        self.btn_pct_col = QPushButton("🎨 Değer Renk")
+        self.btn_pct_col = QPushButton("🎨 Değer")
         self.btn_pct_col.clicked.connect(self.pick_percent_color)
-        color_layout.addWidget(self.btn_pct_col)
+        color_layout.addWidget(self.btn_pct_col, stretch=1)
 
-        self.btn_gfx_col = QPushButton("🎨 Çizgi/Grafik")
+        self.btn_gfx_col = QPushButton("🎨 Grafik")
         self.btn_gfx_col.clicked.connect(self.pick_graphic_color)
-        color_layout.addWidget(self.btn_gfx_col)
+        color_layout.addWidget(self.btn_gfx_col, stretch=1)
         prop_layout.addWidget(self.widget_colors)
 
         # 5. Dynamic Threshold Colors
         self.widget_dynamic_col = QWidget()
         dynamic_col_layout = QHBoxLayout(self.widget_dynamic_col)
         dynamic_col_layout.setContentsMargins(0, 0, 0, 0)
+        dynamic_col_layout.setSpacing(6)
         self.chk_dynamic_color = QCheckBox("🎨 Dinamik Renk")
         self.chk_dynamic_color.stateChanged.connect(self.on_dynamic_color_toggle)
         dynamic_col_layout.addWidget(self.chk_dynamic_color)
 
-        self.btn_custom_thresholds = QPushButton("⚙️ Renk Eşiklerini Ayarla")
-        self.btn_custom_thresholds.setStyleSheet("background: #6366f1; color: white; font-weight: bold;")
+        self.btn_custom_thresholds = QPushButton("⚙️ Renk Eşikleri")
+        self.btn_custom_thresholds.setStyleSheet("background: #6366f1; color: white; font-weight: bold; padding: 5px 8px; font-size: 11px;")
         self.btn_custom_thresholds.clicked.connect(self.open_threshold_settings)
-        dynamic_col_layout.addWidget(self.btn_custom_thresholds)
+        dynamic_col_layout.addWidget(self.btn_custom_thresholds, stretch=1)
         prop_layout.addWidget(self.widget_dynamic_col)
 
         # 3.7 Animation & Breathing Effects
         self.widget_anim_effects = QWidget()
         anim_eff_layout = QHBoxLayout(self.widget_anim_effects)
         anim_eff_layout.setContentsMargins(0, 0, 0, 0)
+        anim_eff_layout.setSpacing(6)
         anim_eff_layout.addWidget(QLabel("✨ Efekt:"))
         self.combo_anim_effect = QComboBox()
+        self.combo_anim_effect.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_anim_effect.setMinimumContentsLength(10)
         self.combo_anim_effect.addItem("Sabit (Kapalı)", "none")
         self.combo_anim_effect.addItem("💨 Nefes Alma (Pulse)", "pulse")
         self.combo_anim_effect.addItem("🌈 RGB Rainbow Spektrum", "rainbow")
         self.combo_anim_effect.addItem("⚡ Yanıp Sönme (Flash)", "flash")
         self.combo_anim_effect.addItem("✨ Neon Parıltı", "neon")
         self.combo_anim_effect.currentIndexChanged.connect(self.on_anim_effect_changed)
-        anim_eff_layout.addWidget(self.combo_anim_effect)
+        anim_eff_layout.addWidget(self.combo_anim_effect, stretch=1)
 
         anim_eff_layout.addWidget(QLabel("Hız:"))
         self.spin_anim_speed = QSpinBox()
@@ -6690,27 +6724,28 @@ class CyberPulseStudioGUI(QMainWindow):
         self.date_event_target.setDisplayFormat("dd.MM.yyyy HH:mm")
         self.date_event_target.setDateTime(QDateTime.currentDateTime().addDays(90))
         self.date_event_target.dateTimeChanged.connect(self.on_countdown_date_changed)
-        cd_layout.addWidget(self.date_event_target)
+        cd_layout.addWidget(self.date_event_target, stretch=1)
         prop_layout.addWidget(self.widget_countdown_settings)
 
         # 3.9 Weather Location Settings
         self.widget_weather_settings = QWidget()
         w_loc_layout = QHBoxLayout(self.widget_weather_settings)
         w_loc_layout.setContentsMargins(0, 0, 0, 0)
+        w_loc_layout.setSpacing(6)
         w_loc_layout.addWidget(QLabel("📍 Konum/İlçe:"))
         self.txt_weather_loc = QLineEdit()
         self.txt_weather_loc.setPlaceholderText("Örn: Çorlu, Kadıköy")
         self.txt_weather_loc.textChanged.connect(self.on_weather_loc_changed)
-        w_loc_layout.addWidget(self.txt_weather_loc)
+        w_loc_layout.addWidget(self.txt_weather_loc, stretch=1)
         self.btn_auto_loc = QPushButton("🎯 Otomatik")
-        self.btn_auto_loc.setStyleSheet("background: #0284c7; color: white; font-weight: bold; padding: 4px 8px;")
+        self.btn_auto_loc.setStyleSheet("background: #0284c7; color: white; font-weight: bold; padding: 4px 8px; font-size: 11px;")
         self.btn_auto_loc.clicked.connect(self.on_auto_weather_loc_clicked)
         w_loc_layout.addWidget(self.btn_auto_loc)
         prop_layout.addWidget(self.widget_weather_settings)
 
         # 6. Granular Marquee Builder Button
-        self.btn_custom_marquee = QPushButton("📜 Kayan Yazı İçeriklerini Seç (Granular Marquee)")
-        self.btn_custom_marquee.setStyleSheet("background: #0284c7; color: white; font-weight: bold;")
+        self.btn_custom_marquee = QPushButton("📜 Kayan Yazı İçeriklerini Seç")
+        self.btn_custom_marquee.setStyleSheet("background: #0284c7; color: white; font-weight: bold; padding: 5px 8px; font-size: 11px;")
         self.btn_custom_marquee.clicked.connect(self.open_marquee_customizer)
         prop_layout.addWidget(self.btn_custom_marquee)
 
@@ -6718,6 +6753,7 @@ class CyberPulseStudioGUI(QMainWindow):
         self.widget_bg_box = QWidget()
         bg_col_layout = QHBoxLayout(self.widget_bg_box)
         bg_col_layout.setContentsMargins(0, 0, 0, 0)
+        bg_col_layout.setSpacing(6)
         bg_col_layout.addWidget(QLabel("Arka Plan:"))
         self.btn_bg_col = QPushButton("🎨 Renk")
         self.btn_bg_col.clicked.connect(self.pick_bg_color)
@@ -6727,12 +6763,12 @@ class CyberPulseStudioGUI(QMainWindow):
         self.slider_bg_opacity = QSlider(Qt.Horizontal)
         self.slider_bg_opacity.setRange(0, 100)
         self.slider_bg_opacity.valueChanged.connect(self.on_bg_opacity_changed)
-        bg_col_layout.addWidget(self.slider_bg_opacity)
+        bg_col_layout.addWidget(self.slider_bg_opacity, stretch=1)
         prop_layout.addWidget(self.widget_bg_box)
 
         # 8. Deselect Button
         btn_deselect = QPushButton("❌ Seçimi Kaldır")
-        btn_deselect.setStyleSheet("background: #334155; color: #94a3b8; font-weight: 600; margin-top: 4px;")
+        btn_deselect.setStyleSheet("background: #334155; color: #94a3b8; font-weight: 600; margin-top: 4px; padding: 5px 8px;")
         btn_deselect.clicked.connect(self.deselect_element)
         prop_layout.addWidget(btn_deselect)
 
@@ -6742,9 +6778,10 @@ class CyberPulseStudioGUI(QMainWindow):
         self.prop_box.setVisible(False) # Default hidden if nothing is selected!
 
         splitter.addWidget(right_box)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setStretchFactor(2, 0)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 3)
+        splitter.setStretchFactor(2, 1)
+        splitter.setSizes([315, 420, 365])
         studio_vbox.addWidget(splitter, stretch=1)
         shell_body.addWidget(right_studio_container, stretch=1)
         main_layout.addLayout(shell_body, stretch=1)
@@ -6772,32 +6809,39 @@ class CyberPulseStudioGUI(QMainWindow):
             ratio = float(tw) / max(1.0, float(th))
 
             # Ideal window dimensions depending on canvas aspect ratio:
-            # Left rail (178) + Left panel (~290) + Right inspector (~335) + margins (~65) = ~870 px non-canvas width
+            # Left rail (232) + Left panel (310) + Center stage (360+) + Right inspector (355) + margins (~40) = ~1300 px
             if ratio <= 0.35:
                 # Tall vertical strip (e.g. 320x1480, 480x1920) -> compact width, tall height
-                target_w, target_h = 1060, 860
+                target_w, target_h = 1310, 860
             elif ratio < 0.85:
                 # Portrait 9:16 (e.g. 1080x1920) -> medium width, tall height
-                target_w, target_h = 1220, 860
+                target_w, target_h = 1380, 860
             elif ratio <= 1.25:
                 # Square-ish
-                target_w, target_h = 1280, 820
+                target_w, target_h = 1420, 840
             elif ratio <= 2.2:
                 # Standard 16:9 / 16:10 Landscape (e.g. 1920x1080, 1024x600, 800x480)
-                target_w, target_h = 1440, 820
+                target_w, target_h = 1540, 840
             else:
                 # Ultra-wide horizontal strip (e.g. 1920x480, 1280x400)
-                target_w, target_h = 1480, 740
+                target_w, target_h = 1580, 780
 
             screen = QApplication.primaryScreen()
             if screen:
                 avail = screen.availableGeometry()
                 if avail.width() >= 1024 and avail.height() >= 720:
-                    target_w = min(target_w, max(920, avail.width() - 40))
-                    target_h = min(target_h, max(600, avail.height() - 40))
+                    target_w = min(target_w, max(1180, avail.width() - 30))
+                    target_h = min(target_h, max(640, avail.height() - 30))
 
             if not self.isMaximized() and not self.isFullScreen():
                 self.resize(int(target_w), int(target_h))
+
+            if hasattr(self, 'main_splitter'):
+                avail_split_w = max(900, int(target_w) - 255)
+                lw = max(310, int(avail_split_w * 0.27))
+                rw = max(355, int(avail_split_w * 0.31))
+                cw = max(360, avail_split_w - lw - rw)
+                self.main_splitter.setSizes([lw, cw, rw])
 
             QTimer.singleShot(25, self.update_canvas_geometry)
         except Exception as e:
@@ -7693,10 +7737,10 @@ class CyberPulseStudioGUI(QMainWindow):
         self.chk_dynamic_color.setChecked(bool(el.get('dynamicColor', False)))
         self.slider_bg_opacity.setValue(int(el.get('bgOpacity', 50)))
 
-        self.btn_txt_col.setStyleSheet(f"background: {el.get('textColor', '#ffffff')}; color: black;")
-        self.btn_pct_col.setStyleSheet(f"background: {el.get('percentColor', '#38bdf8')}; color: black;")
-        self.btn_gfx_col.setStyleSheet(f"background: {el.get('graphicColor', '#38bdf8')}; color: black;")
-        self.btn_bg_col.setStyleSheet(f"background: {el.get('bgColor', '#0f172a')}; color: white;")
+        self.btn_txt_col.setStyleSheet(f"background: {el.get('textColor', '#ffffff')}; color: black; padding: 5px 6px; font-size: 11px;")
+        self.btn_pct_col.setStyleSheet(f"background: {el.get('percentColor', '#38bdf8')}; color: black; padding: 5px 6px; font-size: 11px;")
+        self.btn_gfx_col.setStyleSheet(f"background: {el.get('graphicColor', '#38bdf8')}; color: black; padding: 5px 6px; font-size: 11px;")
+        self.btn_bg_col.setStyleSheet(f"background: {el.get('bgColor', '#0f172a')}; color: white; padding: 5px 8px; font-size: 11px;")
 
         self.txt_label.blockSignals(False)
         self.combo_sensor_type.blockSignals(False)
@@ -8020,14 +8064,16 @@ class CyberPulseStudioGUI(QMainWindow):
                 if item.widget():
                     item.widget().deleteLater()
 
-            for sid, ws in list(self.screen_workspaces.items()):
+            for idx_s, (sid, ws) in enumerate(list(self.screen_workspaces.items()), start=1):
                 is_active = (sid == self.active_screen_slot_id)
-                t_name = str(ws.get('theme_data', {}).get('name', 'Özel'))[:16]
+                t_name = str(ws.get('theme_data', {}).get('name', 'Özel'))[:14]
                 tw = int(ws.get('theme_data', {}).get('width', 320))
                 th = int(ws.get('theme_data', {}).get('height', 1480))
                 stream_dot = "🟢" if ws.get('stream_enabled', True) else "⚪"
                 rot_badge = " 🎠" if ws.get('auto_rotate_enabled', False) else ""
-                btn_lbl = f"{stream_dot} {ws.get('title', sid)} [{tw}×{th}]  •  🎨 {t_name}{rot_badge}"
+                s_icon = "📟" if ws.get('screen_type') == 'usb_serial' else "🖥️"
+                s_tag = "USB LCD" if ws.get('screen_type') == 'usb_serial' else f"Ekran {idx_s}"
+                btn_lbl = f"{stream_dot} {s_icon} {s_tag} ({tw}×{th}){rot_badge}"
 
                 btn = QPushButton(btn_lbl)
                 rot_status_tip = "AÇIK" if ws.get('auto_rotate_enabled', False) else "KAPALI"
@@ -8045,7 +8091,7 @@ class CyberPulseStudioGUI(QMainWindow):
                             color: #ffffff;
                             border: 1px solid #8083ff;
                             border-radius: 7px;
-                            padding: 5px 12px;
+                            padding: 4px 9px;
                             font-size: 11px;
                             font-weight: 900;
                         }
@@ -8057,7 +8103,7 @@ class CyberPulseStudioGUI(QMainWindow):
                             color: #908fa0;
                             border: 1px solid #1e293b;
                             border-radius: 7px;
-                            padding: 5px 12px;
+                            padding: 4px 9px;
                             font-size: 11px;
                             font-weight: 700;
                         }
@@ -8178,7 +8224,7 @@ class CyberPulseStudioGUI(QMainWindow):
 
                 t_name = active_ws.get('theme_data', {}).get('name', 'Özel Tema')
                 if hasattr(self, 'lbl_center_ws_title'):
-                    self.lbl_center_ws_title.setText(f"📺 {active_ws.get('title')}  •  🎨 {t_name}")
+                    self.lbl_center_ws_title.setText(f"🎨 {t_name}")
             if hasattr(self, 'apply_current_language'):
                 self.apply_current_language()
         except Exception as e:

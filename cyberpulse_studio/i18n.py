@@ -85,11 +85,14 @@ TR_TO_EN_EXACT = {
     "Yayına Dahil Et": "Include in Stream",
     "Bu ekranı çoklu ekran canlı yansıtmasına dahil eder": "Include this screen in multi-display live streaming",
     "📐 Ekran Çözünürlüğü:": "📐 Resolution:",
+    "📐 Çözünürlük:": "📐 Resolution:",
     "🎨 Bu Ekranın Teması:": "🎨 Screen Theme:",
+    "🎨 Tema:": "🎨 Theme:",
     "Oto Döngü": "Auto Rotate",
     "Bu ekranda seçili temaların otomatik olarak sırayla/rastgele değişmesini açar/kapatır":
         "Toggle automatic sequential/random rotation of selected themes on this screen",
     "📋 Başka Ekrandan Kopyala": "📋 Copy from Screen",
+    "📋 Kopyala": "📋 Copy",
     "Başka bir ekranın özel temasını bu ekrana kopyalar ve boyuta uyarlar":
         "Copy another screen's theme to this screen and adapt to its resolution",
 
@@ -185,6 +188,7 @@ TR_TO_EN_EXACT = {
     "↷ İleri Al": "↷ Redo",
     "Geri alınan işlemi yinele (Ctrl+Y)": "Redo last action (Ctrl+Y)",
     "⊞ MIKNATIS [AÇIK]": "⊞ SNAP [ON]",
+    "⊞ Mıknatıs": "⊞ Snap",
 
     # Right Column (Layers & Inspector)
     "HİZALA": "ALIGN",
@@ -225,11 +229,16 @@ TR_TO_EN_EXACT = {
     "🔲 Çerçeve": "🔲 Border",
     "✨ Neon Glow": "✨ Neon Glow",
     "Köşe:": "Radius:",
+    "Köşe Yuvarlatma:": "Corner Radius:",
     "🎨 Yazı Renk": "🎨 Text Color",
+    "🎨 Yazı": "🎨 Text",
     "🎨 Değer Renk": "🎨 Value Color",
+    "🎨 Değer": "🎨 Value",
     "🎨 Çizgi/Grafik": "🎨 Line/Graph",
+    "🎨 Grafik": "🎨 Graph",
     "🎨 Dinamik Renk": "🎨 Dynamic Color",
     "⚙️ Renk Eşiklerini Ayarla": "⚙️ Threshold Settings",
+    "⚙️ Renk Eşikleri": "⚙️ Thresholds",
     "✨ Efekt:": "✨ Effect:",
     "Sabit (Kapalı)": "None (Static)",
     "💨 Nefes Alma (Pulse)": "💨 Breathing (Pulse)",
@@ -242,6 +251,7 @@ TR_TO_EN_EXACT = {
     "Örn: Çorlu, Kadıköy": "e.g. London, New York, Istanbul",
     "🎯 Otomatik": "🎯 Auto",
     "📜 Kayan Yazı İçeriklerini Seç (Granular Marquee)": "📜 Customize Scrolling Ticker Items",
+    "📜 Kayan Yazı İçeriklerini Seç": "📜 Customize Ticker Items",
     "Arka Plan:": "Background:",
     "🎨 Renk": "🎨 Color",
     "Opaklık (%):": "Opacity (%):",
