@@ -383,6 +383,27 @@ TR_TO_EN_EXACT = {
     "✂️ CyberPulse — Arka Plan Medya Kırpıcı & Boyutlandırıcı": "✂️ CyberPulse — Background Media Cropper & Resizer",
     "✂️ Arka Plan Medya Kırpıcı (Video / GIF / Resim)": "✂️ Background Media Cropper (Video / GIF / Image)",
     "✅ Kırpmayı Uygula": "✅ Apply Crop",
+
+    # New v1.4.0 Widgets & Features
+    "🎛️ Canlı Ses / Müzik Ekolayzırı": "🎛️ Live Audio / Music Visualizer",
+    "🔥 GPU Hotspot Sıcaklığı": "🔥 GPU Hotspot Temp",
+    "🎮 GPU VRAM Kullanımı (GB)": "🎮 GPU VRAM Used (GB)",
+    "🎮 GPU Kalan / Boş VRAM (GB)": "🎮 Free GPU VRAM (GB)",
+    "GPU Hotspot Sıcaklığı": "GPU Hotspot Temp",
+    "GPU VRAM Kullanımı (GB)": "GPU VRAM Used (GB)",
+    "GPU VRAM Yükü (%)": "GPU VRAM Load (%)",
+    "GPU Kalan / Boş VRAM (GB)": "Free GPU VRAM (GB)",
+    "🎬  GIF / Video Çıktı": "🎬  Export GIF / Video",
+    "🌟 Hazır Tema Paketleri": "🌟 Pro Theme Packs",
+    "🎛️ Ekolayzır Stili:": "🎛️ Visualizer Style:",
+    "📊 Dikey LED Barlar (Bars)": "📊 Vertical LED Bars",
+    "🌊 Akıcı Ses Dalgası (Wave)": "🌊 Smooth Audio Waveform",
+    "🌙 Windows Kilitlendiğinde (Win+L) Kasa Ekranını Otomatik Uyku Moduna Al":
+        "🌙 Auto-Standby Case LCD When Windows is Locked (Win+L)",
+    "Kasa Ekranı Parlaklığı (%)": "Case Display Brightness (%)",
+    "Ekran Uyku / Bekleme Modu (Ekranı Karart / Uyandır)": "Display Standby / Sleep Mode (Dim / Wake Screen)",
+    "Seçili Öğeleri Grupla / Grubu Çöz (Ctrl+G)": "Group / Ungroup Selected Widgets (Ctrl+G)",
+    "Başlık / Etiket:": "Title / Label:",
 }
 
 # Dynamic regex patterns (Turkish -> English)

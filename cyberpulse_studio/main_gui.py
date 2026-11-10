@@ -141,7 +141,7 @@ RGB_APP_SCRIPT = os.path.join(APP_BUNDLE_DIR, 'rgb_studio_gui.py')
 VERSION_FILE = os.path.join(APP_BUNDLE_DIR, 'version.json')
 os.makedirs(PRESET_THEMES_DIR, exist_ok=True)
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 try:
     if os.path.isfile(VERSION_FILE) and os.path.getsize(VERSION_FILE) <= 16384:
         with open(VERSION_FILE, 'r', encoding='utf-8') as _vf:
@@ -1049,6 +1049,12 @@ class ThemePresetManagerDialog(QDialog):
         btn_open_rot.setStyleSheet("background: #222a3d; border: 1px solid #8083ff; color: #e0e7ff; font-weight: 800; padding: 8px;")
         btn_open_rot.clicked.connect(self.open_per_screen_rotation_dialog)
         io_box.addWidget(btn_open_rot)
+
+        btn_hub_pack = QPushButton("🌟 Hazır Tema Paketleri")
+        btn_hub_pack.setToolTip("Aktif ekran çözünürlüğünüze özel tasarlanmış profesyonel hazır tema şablonlarını (Cyberpunk, ROG, Matrix, Minimal) tek tıkla oluşturur")
+        btn_hub_pack.setStyleSheet("background: #171f33; border: 1px solid #f59e0b; color: #fbbf24; font-weight: 800; padding: 8px;")
+        btn_hub_pack.clicked.connect(self.install_curated_theme_pack)
+        io_box.addWidget(btn_hub_pack)
         left_vbox.addLayout(io_box)
 
         main_split.addLayout(left_vbox, stretch=3)
@@ -1661,6 +1667,100 @@ class ThemePresetManagerDialog(QDialog):
                 self.accept()
         except Exception as e:
             QMessageBox.critical(self, "Tema Yükleme Hatası", f"Tema yüklenirken hata oluştu: {e}")
+
+    def install_curated_theme_pack(self):
+        """🌟 Generates 4 resolution-matched curated professional .cptheme templates (Cyberpunk, ROG Neon, Matrix HUD, Minimal Arctic)."""
+        try:
+            aw, ah = self._get_active_screen_resolution()
+            presets = [
+                ("Cyberpunk 2077 HUD", "#0b071e", "#facc15", "#00f0ff", "#ff0055"),
+                ("ROG Republic Red", "#0f0508", "#ffffff", "#ef4444", "#dc2626"),
+                ("Matrix Cyber Grid", "#021208", "#a7f3d0", "#10b981", "#059669"),
+                ("Minimalist Ice Pro", "#0f172a", "#f8fafc", "#38bdf8", "#818cf8"),
+            ]
+            created = 0
+            for base_name, bg_hex, txt_col, val_col, gfx_col in presets:
+                full_name = f"{base_name} ({aw}x{ah})"
+                safe_name = _sanitize_theme_filename(full_name)
+                dst_path = os.path.join(PRESET_THEMES_DIR, f"{safe_name}.cptheme")
+                # Build procedural gradient backdrop image
+                bg_img = Image.new('RGB', (aw, ah), bg_hex)
+                draw_bg = ImageDraw.Draw(bg_img)
+                draw_bg.rectangle([6, 6, aw - 7, ah - 7], outline=gfx_col, width=2)
+                buf = io.BytesIO()
+                bg_img.save(buf, format='PNG')
+                is_land = aw > ah
+                sf = max(0.9, min(2.0, (ah / 720.0) if is_land else (aw / 320.0)))
+                els = [
+                    {
+                        'id': 'el_hdr', 'type': 'text', 'sensorId': 'text', 'label': f"⚡ {base_name.upper()}",
+                        'x': 20, 'y': 16, 'width': aw - 40, 'height': int(42 * sf),
+                        'textColor': txt_col, 'percentColor': val_col, 'graphicColor': gfx_col,
+                        'bgColor': bg_hex, 'bgOpacity': 70, 'cornerRadius': 8, 'fontSize': int(16 * sf),
+                        'valueFontSize': int(20 * sf), 'fontFamily': 'Segoe UI', 'isBold': True,
+                        'textAlign': 'center', 'showBorder': True
+                    },
+                    {
+                        'id': 'el_cpu', 'type': 'gauge', 'sensorId': 'cpu_temp', 'label': 'CPU SICAKLIK',
+                        'x': 20, 'y': int(72 * sf), 'width': (aw // 2 - 30) if is_land else (aw - 40), 'height': int(54 * sf),
+                        'textColor': txt_col, 'percentColor': val_col, 'graphicColor': gfx_col,
+                        'bgColor': bg_hex, 'bgOpacity': 65, 'cornerRadius': 8, 'fontSize': int(15 * sf),
+                        'valueFontSize': int(20 * sf), 'fontFamily': 'Consolas', 'isBold': True, 'showBorder': True
+                    },
+                    {
+                        'id': 'el_gpu', 'type': 'gauge', 'sensorId': 'gpu_temp', 'label': 'GPU SICAKLIK',
+                        'x': (aw // 2 + 10) if is_land else 20, 'y': int(72 * sf) if is_land else int(136 * sf),
+                        'width': (aw // 2 - 30) if is_land else (aw - 40), 'height': int(54 * sf),
+                        'textColor': txt_col, 'percentColor': val_col, 'graphicColor': gfx_col,
+                        'bgColor': bg_hex, 'bgOpacity': 65, 'cornerRadius': 8, 'fontSize': int(15 * sf),
+                        'valueFontSize': int(20 * sf), 'fontFamily': 'Consolas', 'isBold': True, 'showBorder': True
+                    },
+                    {
+                        'id': 'el_ram', 'type': 'gauge', 'sensorId': 'ram_used', 'ramDisplayMode': 'used_both', 'label': 'RAM BELLEK',
+                        'x': 20, 'y': int(140 * sf) if is_land else int(200 * sf),
+                        'width': (aw // 2 - 30) if is_land else (aw - 40), 'height': int(54 * sf),
+                        'textColor': txt_col, 'percentColor': val_col, 'graphicColor': gfx_col,
+                        'bgColor': bg_hex, 'bgOpacity': 65, 'cornerRadius': 8, 'fontSize': int(15 * sf),
+                        'valueFontSize': int(19 * sf), 'fontFamily': 'Consolas', 'isBold': True, 'showBorder': True
+                    },
+                    {
+                        'id': 'el_vram', 'type': 'gauge', 'sensorId': 'gpu_vram_used', 'ramDisplayMode': 'used_both', 'label': 'GPU VRAM',
+                        'x': (aw // 2 + 10) if is_land else 20, 'y': int(140 * sf) if is_land else int(264 * sf),
+                        'width': (aw // 2 - 30) if is_land else (aw - 40), 'height': int(54 * sf),
+                        'textColor': txt_col, 'percentColor': val_col, 'graphicColor': gfx_col,
+                        'bgColor': bg_hex, 'bgOpacity': 65, 'cornerRadius': 8, 'fontSize': int(15 * sf),
+                        'valueFontSize': int(19 * sf), 'fontFamily': 'Consolas', 'isBold': True, 'showBorder': True
+                    },
+                    {
+                        'id': 'el_eq', 'type': 'audio_visualizer', 'sensorId': 'audio_level', 'visualizerStyle': 'bars', 'label': 'SES SPEKTRUMU',
+                        'x': 20, 'y': int(210 * sf) if is_land else int(330 * sf),
+                        'width': aw - 40, 'height': int(95 * sf),
+                        'textColor': txt_col, 'percentColor': val_col, 'graphicColor': gfx_col,
+                        'bgColor': bg_hex, 'bgOpacity': 65, 'cornerRadius': 8, 'fontSize': int(14 * sf),
+                        'valueFontSize': int(16 * sf), 'fontFamily': 'Consolas', 'isBold': True, 'showBorder': True
+                    },
+                ]
+                t_dict = {
+                    'name': safe_name,
+                    'width': aw,
+                    'height': ah,
+                    'refresh_sec': 1.0,
+                    'rotation': 0 if is_land else 180,
+                    'thermal_alert_limit': 85,
+                    'elements': els
+                }
+                if write_cptheme_file(dst_path, t_dict, media_bytes=buf.getvalue(), media_type='IMG0'):
+                    created += 1
+            self.refresh_theme_list(preserve_filter=True)
+            if hasattr(self.gui, 'refresh_multi_screen_bar_ui'):
+                self.gui.refresh_multi_screen_bar_ui()
+            QMessageBox.information(
+                self,
+                "🌟 Hazır Tema Paketleri Eklendi",
+                f"Aktif ekran çözünürlüğünüz ({aw}×{ah}) için {created} adet profesyonel tema şablonu (Cyberpunk, ROG, Matrix, Minimalist) oluşturuldu ve listeye eklendi!"
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Hata", f"Hazır tema paketleri oluşturulurken hata: {e}")
 
 
 class ScreenAutoRotateDialog(QDialog):
@@ -2408,6 +2508,10 @@ class AppSettingsDialog(QDialog):
         self.chk_auto_update.setChecked(bool(self.gui.app_settings.get('auto_check_updates', True)))
         grp_layout.addWidget(self.chk_auto_update)
 
+        self.chk_sleep_on_lock = QCheckBox("🌙 Bilgisayar Kilitlendiğinde (Win+L) Kasa Ekranını Otomatik Karart (IPS Koruması)")
+        self.chk_sleep_on_lock.setChecked(bool(self.gui.app_settings.get('sleep_on_lock', True)))
+        grp_layout.addWidget(self.chk_sleep_on_lock)
+
         lang_row = QHBoxLayout()
         lbl_lang = QLabel("🌐 Uygulama Dili / Language:")
         lbl_lang.setStyleSheet("color: #dae2fd; font-size: 11px; font-weight: 700; border: none;")
@@ -2683,6 +2787,8 @@ class AppSettingsDialog(QDialog):
             self.gui.app_settings['auto_stream_on_start'] = self.chk_autostream.isChecked()
             if hasattr(self, 'chk_auto_update'):
                 self.gui.app_settings['auto_check_updates'] = self.chk_auto_update.isChecked()
+            if hasattr(self, 'chk_sleep_on_lock'):
+                self.gui.app_settings['sleep_on_lock'] = self.chk_sleep_on_lock.isChecked()
             self.gui.app_settings['selected_com_port'] = self.dialog_combo_port.currentData()
             if hasattr(self, 'combo_app_lang'):
                 self.gui.app_settings['language'] = self.combo_app_lang.currentData()
@@ -3719,6 +3825,11 @@ class InteractiveCanvasWidget(QWidget):
             self.app.set_multi_selection(all_idx)
             event.accept()
             return
+        elif key == Qt.Key_G and (mods & Qt.ControlModifier):
+            if hasattr(self.app, 'toggle_group_selected_elements'):
+                self.app.toggle_group_selected_elements()
+            event.accept()
+            return
         super().keyPressEvent(event)
 
     def paintEvent(self, event):
@@ -3726,6 +3837,22 @@ class InteractiveCanvasWidget(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         if self.current_pixmap:
             painter.drawPixmap(0, 0, self.current_pixmap)
+
+        # 📏 Subtle Pixel Ruler Ticks Along Top & Left Edges
+        try:
+            painter.setPen(QPen(QColor(148, 163, 184, 95), 1))
+            painter.setFont(QFont("Consolas", 6))
+            tw = max(64, int(self.app.theme_data.get('width', 320)))
+            th = max(64, int(self.app.theme_data.get('height', 1480)))
+            step_px = 100 if max(tw, th) <= 1600 else 200
+            for rx in range(0, tw + 1, step_px):
+                sx = int(rx * self.scale_factor)
+                painter.drawLine(sx, 0, sx, 5)
+            for ry in range(0, th + 1, step_px):
+                sy = int(ry * self.scale_factor)
+                painter.drawLine(0, sy, 5, sy)
+        except Exception:
+            pass
 
         # 🧲 Draw Smart Magnetic Alignment Snap Guides
         for g_type, coord, col in self.active_snap_guides:
@@ -4263,6 +4390,7 @@ class CyberPulseStudioGUI(QMainWindow):
             QShortcut(QKeySequence("Ctrl+Z"), self, self.undo_action)
             QShortcut(QKeySequence("Ctrl+Y"), self, self.redo_action)
             QShortcut(QKeySequence("Ctrl+D"), self, self.duplicate_selected_element)
+            QShortcut(QKeySequence("Ctrl+G"), self, self.toggle_group_selected_elements)
             QShortcut(QKeySequence("Delete"), self, self.delete_selected_element)
         except Exception:
             pass
@@ -4359,6 +4487,14 @@ class CyberPulseStudioGUI(QMainWindow):
             prev_theme_action = QAction("⏮️ Önceki Tema", self)
             prev_theme_action.triggered.connect(lambda: self.switch_theme_relative(-1))
             tray_menu.addAction(prev_theme_action)
+
+            sleep_action = QAction("🌙 Ekran Uyku Modu (Aç/Kapat)", self)
+            sleep_action.triggered.connect(self.toggle_screen_sleep_mode)
+            tray_menu.addAction(sleep_action)
+
+            export_gif_action = QAction("🎬 GIF / Video Olarak Dışa Aktar", self)
+            export_gif_action.triggered.connect(self.export_active_theme_animation)
+            tray_menu.addAction(export_gif_action)
 
             tray_menu.addSeparator()
 
@@ -5543,6 +5679,7 @@ class CyberPulseStudioGUI(QMainWindow):
             ("↻  Oto Döngü Havuzu", "Bu ekran (ve diğer ekranlar) için hangi temaların hangi sürede otomatik değişeceğini seçin", lambda: self.open_screen_auto_rotate_dialog(self.active_screen_slot_id)),
             ("🎮  Oyun Profilleri", "Sistemde yüklü oyunları istediğiniz temalara bağlayın — oyun açıldığında otomatik o temaya geçsin", self.open_game_profile_manager),
             ("💾  Şablona Kaydet", "Mevcut ekranın temasını kendi çözünürlüğünde tek dosya (.cptheme) olarak kaydeder", self.save_theme_to_preset_folder),
+            ("🎬  GIF / Video Çıktı", "Mevcut temayı canlı sensör ve animasyonlarıyla hareketli GIF veya MP4 video olarak dışa aktarın", self.export_active_theme_animation),
             ("✂  Medya Kırpıcı", "Arka plan medyasını ekran oranına göre kırpın veya tam sığdırın", self.open_media_crop_dialog),
         ]
         for r_text, r_tip, r_cb in rail_nav_items:
@@ -5802,6 +5939,39 @@ class CyberPulseStudioGUI(QMainWindow):
         )
         nav_box.addWidget(self.lbl_port_status)
 
+        # ☀ Hardware & Frame Brightness Control Pill + 🌙 Sleep Toggle
+        bright_pill = QFrame()
+        bright_pill.setStyleSheet("QFrame { background-color: #060e20; border: 1px solid #1e293b; border-radius: 7px; }")
+        bp_lay = QHBoxLayout(bright_pill)
+        bp_lay.setContentsMargins(6, 2, 6, 2)
+        bp_lay.setSpacing(4)
+        lbl_sun = QLabel("☀")
+        lbl_sun.setToolTip("Kasa Ekranı Parlaklığı (%5 - %100)")
+        lbl_sun.setStyleSheet("color: #fbbf24; font-size: 11px; border: none; background: transparent;")
+        bp_lay.addWidget(lbl_sun)
+
+        self.slider_top_brightness = QSlider(Qt.Horizontal)
+        self.slider_top_brightness.setRange(5, 100)
+        init_bright = int(self.theme_data.get('brightness_pct', self.app_settings.get('brightness_pct', 100)))
+        self.slider_top_brightness.setValue(max(5, min(100, init_bright)))
+        self.slider_top_brightness.setFixedWidth(56)
+        self.slider_top_brightness.setToolTip("Kasa ekranı parlaklığını ayarlayın (%5 - %100)")
+        self.slider_top_brightness.valueChanged.connect(self.on_top_brightness_changed)
+        bp_lay.addWidget(self.slider_top_brightness)
+
+        self.lbl_top_brightness_val = QLabel(f"{init_bright}%")
+        self.lbl_top_brightness_val.setMinimumWidth(30)
+        self.lbl_top_brightness_val.setStyleSheet("color: #dae2fd; font-family: 'Consolas', monospace; font-size: 10px; font-weight: 800; border: none; background: transparent;")
+        bp_lay.addWidget(self.lbl_top_brightness_val)
+
+        self.btn_top_sleep = QPushButton("🌙")
+        self.btn_top_sleep.setToolTip("Kasa Ekranı Uyku Modu (Ekranı karart / uyandır)")
+        self.btn_top_sleep.setFixedSize(24, 22)
+        self.btn_top_sleep.setStyleSheet("background: #131b2e; color: #7bd0ff; border: none; border-radius: 4px; font-size: 11px;")
+        self.btn_top_sleep.clicked.connect(self.toggle_screen_sleep_mode)
+        bp_lay.addWidget(self.btn_top_sleep)
+        nav_box.addWidget(bright_pill)
+
         self.btn_stream = QPushButton("🚀 CANLI YANSIT")
         self.btn_stream.setStyleSheet("background: #00885d; color: #eafff6; font-size: 11px; font-weight: 900; padding: 6px 14px; border-radius: 7px; border: none;")
         self.btn_stream.clicked.connect(lambda: self.toggle_live_stream(silent_on_fail=False))
@@ -6051,6 +6221,7 @@ class CyberPulseStudioGUI(QMainWindow):
             }
         """)
         sensor_items = [
+            ("🎛️ Canlı Ses / Müzik Ekolayzırı", "audio_level", "audio_visualizer", "WASAPI Spektrum", "#f472b6", "rgba(244,114,182,0.18)"),
             ("📈 Canlı Çizgi Grafik (Sparkline)", "cpu_temp", "sparkline_graph", "60s Geçmiş", "#8083ff", "rgba(128,131,255,0.18)"),
             ("🖼️ Özel Resim / Logo / İkon Katmanı", "custom_image", "custom_image", "PNG / WebP / GIF", "#c0c1ff", "rgba(128,131,255,0.18)"),
             ("🎮 FPS Göstergesi", "game_fps", "sensor", "RTSS Hook", "#4edea3", "rgba(0,136,93,0.20)"),
@@ -6059,8 +6230,11 @@ class CyberPulseStudioGUI(QMainWindow):
             ("🚀 CPU Frekansı (MHz)", "cpu_clock", "sensor", "Boost Saati", "#7bd0ff", "rgba(0,166,224,0.18)"),
             ("🌀 CPU Fan Hızı (RPM)", "cpu_fan", "sensor", "PWM Anakart", "#7bd0ff", "rgba(0,166,224,0.18)"),
             ("🔥 GPU Sıcaklığı", "gpu_temp", "sensor", "GPU Çekirdek", "#ffb4ab", "rgba(239,68,68,0.18)"),
+            ("🔥 GPU Hotspot Sıcaklığı", "gpu_hotspot", "sensor", "GPU Tjunction", "#ffb4ab", "rgba(239,68,68,0.18)"),
             ("🎮 GPU Kullanımı (%)", "gpu_load", "sensor", "3D Motor Yükü", "#ffb4ab", "rgba(239,68,68,0.18)"),
             ("🌀 GPU Fan Hızı (%)", "gpu_fan", "sensor", "Soğutucu Fan", "#ffb4ab", "rgba(239,68,68,0.18)"),
+            ("🎮 GPU VRAM Kullanımı (GB)", "gpu_vram_used", "sensor", "Ekran Kartı Belleği", "#ffb4ab", "rgba(239,68,68,0.18)"),
+            ("🎮 GPU Kalan / Boş VRAM (GB)", "gpu_vram_free", "sensor", "Boş VRAM Belleği", "#4edea3", "rgba(0,136,93,0.20)"),
             ("💾 RAM Kullanımı (GB)", "ram_used", "sensor", "Kullanılan Bellek", "#c0c1ff", "rgba(128,131,255,0.18)"),
             ("💾 Kalan / Boş RAM (GB)", "ram_free", "sensor", "Kalan Boş Bellek", "#4edea3", "rgba(0,136,93,0.20)"),
             ("💿 Disk Okuma/Yazma (MB/s)", "disk_io", "sensor", "NVMe / SATA I/O", "#4edea3", "rgba(0,136,93,0.20)"),
@@ -6085,14 +6259,20 @@ class CyberPulseStudioGUI(QMainWindow):
         ]
 
         default_lbl_map = {
+            "audio_level": "SES SPEKTRUMU",
             "game_fps": "FPS",
             "cpu_temp": "CPU",
             "cpu_load": "CPU YÜK",
             "cpu_clock": "CPU MHZ",
             "cpu_fan": "CPU FAN",
             "gpu_temp": "GPU",
+            "gpu_hotspot": "GPU HOTSPOT",
             "gpu_load": "GPU YÜK",
             "gpu_fan": "GPU FAN",
+            "gpu_vram_used": "VRAM",
+            "gpu_vram_load": "VRAM",
+            "gpu_vram_free": "BOŞ VRAM",
+            "gpu_vram_free_load": "BOŞ VRAM",
             "ram_used": "RAM",
             "ram_load": "RAM",
             "ram_free": "BOŞ RAM",
@@ -6323,6 +6503,13 @@ class CyberPulseStudioGUI(QMainWindow):
         btn_dup.clicked.connect(self.duplicate_selected_element)
         layer_hdr_row.addWidget(btn_dup)
 
+        self.btn_group_el = QPushButton("🔗")
+        self.btn_group_el.setToolTip("Seçili ögeleri grupla / grubu çöz (Ctrl+G)")
+        self.btn_group_el.setFixedSize(26, 24)
+        self.btn_group_el.setStyleSheet(compact_btn_qss)
+        self.btn_group_el.clicked.connect(self.toggle_group_selected_elements)
+        layer_hdr_row.addWidget(self.btn_group_el)
+
         self.btn_lock_el = QPushButton("🔒")
         self.btn_lock_el.setToolTip("Seçili ögeyi kilitle / kilidi aç")
         self.btn_lock_el.setFixedSize(26, 24)
@@ -6472,8 +6659,13 @@ class CyberPulseStudioGUI(QMainWindow):
             ("🚀 CPU Frekansı (MHz)", "cpu_clock"),
             ("🌀 CPU Fan Hızı (RPM)", "cpu_fan"),
             ("🔥 GPU Sıcaklığı", "gpu_temp"),
+            ("🔥 GPU Hotspot Sıcaklığı", "gpu_hotspot"),
             ("🎮 GPU Kullanımı (%)", "gpu_load"),
             ("🌀 GPU Fan Hızı (%)", "gpu_fan"),
+            ("🎮 GPU VRAM Kullanımı (GB)", "gpu_vram_used"),
+            ("📊 GPU VRAM Kullanımı (%)", "gpu_vram_load"),
+            ("🎮 GPU Kalan / Boş VRAM (GB)", "gpu_vram_free"),
+            ("📊 GPU Kalan / Boş VRAM (%)", "gpu_vram_free_load"),
             ("💾 RAM Kullanımı (GB)", "ram_used"),
             ("📊 RAM Kullanımı (%)", "ram_load"),
             ("💾 Kalan / Boş RAM (GB)", "ram_free"),
@@ -6515,6 +6707,20 @@ class CyberPulseStudioGUI(QMainWindow):
         self.combo_ram_mode.currentIndexChanged.connect(self.on_ram_mode_changed)
         ram_mode_layout.addWidget(self.combo_ram_mode, stretch=1)
         prop_layout.addWidget(self.widget_ram_mode)
+
+        # 1.3 Audio Visualizer Style Selector (Visible when audio_visualizer is selected!)
+        self.widget_visualizer_style = QWidget()
+        vis_style_layout = QHBoxLayout(self.widget_visualizer_style)
+        vis_style_layout.setContentsMargins(0, 0, 0, 0)
+        vis_style_layout.addWidget(QLabel("🎛️ Ekolayzır Stili:"))
+        self.combo_visualizer_style = QComboBox()
+        self.combo_visualizer_style.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_visualizer_style.setMinimumContentsLength(14)
+        self.combo_visualizer_style.addItem("📊 Dikey LED Barlar (Bars)", "bars")
+        self.combo_visualizer_style.addItem("🌊 Akıcı Ses Dalgası (Wave)", "wave")
+        self.combo_visualizer_style.currentIndexChanged.connect(self.on_visualizer_style_changed)
+        vis_style_layout.addWidget(self.combo_visualizer_style, stretch=1)
+        prop_layout.addWidget(self.widget_visualizer_style)
 
         # 1.5 Custom Image Layer Picker (Visible when custom_image is selected)
         self.widget_custom_image = QWidget()
@@ -7215,6 +7421,8 @@ class CyberPulseStudioGUI(QMainWindow):
             auto_w, auto_h = int(64 * scale_f), int(280 * scale_f)
         elif el_type == 'sparkline_graph':
             auto_w, auto_h = int(300 * scale_f), int(105 * scale_f)
+        elif el_type == 'audio_visualizer':
+            auto_w, auto_h = int(300 * scale_f), int(95 * scale_f)
         elif el_type == 'custom_image':
             side = int(140 * scale_f)
             auto_w, auto_h = side, side
@@ -7254,7 +7462,8 @@ class CyberPulseStudioGUI(QMainWindow):
             'graphicColor': '#38bdf8',
             'bgColor': '#0f172a',
             'bgOpacity': 0 if el_type == 'custom_image' else 50,
-            'cornerRadius': 8 if el_type == 'sparkline_graph' else 0,
+            'cornerRadius': 8 if el_type in ('sparkline_graph', 'audio_visualizer') else 0,
+            'visualizerStyle': 'bars',
             'glowEnabled': False,
             'fontSize': max(12, int(round(18 * scale_f))),
             'valueFontSize': max(16, int(round(24 * scale_f))),
@@ -7285,6 +7494,8 @@ class CyberPulseStudioGUI(QMainWindow):
             self.lbl_layer_stack_hdr.setText(f"KATMANLAR ({len(els)} ÖGE)")
         for idx, el in enumerate(els):
             badges = ""
+            if el.get('groupId'):
+                badges += "🔗 "
             if el.get('locked', False):
                 badges += "🔒 "
             if el.get('hidden', False):
@@ -7331,10 +7542,23 @@ class CyberPulseStudioGUI(QMainWindow):
     def select_element_by_index(self, idx, clear_others=True):
         if 0 <= idx < len(self.theme_data['elements']):
             self.selected_element_idx = idx
+            el = self.theme_data['elements'][idx]
+            grp_id = el.get('groupId')
             if clear_others:
-                self.selected_element_indices = {idx}
+                if grp_id:
+                    self.selected_element_indices = {
+                        i for i, item in enumerate(self.theme_data['elements'])
+                        if item.get('groupId') == grp_id
+                    }
+                else:
+                    self.selected_element_indices = {idx}
             else:
-                self.selected_element_indices.add(idx)
+                if grp_id:
+                    for i, item in enumerate(self.theme_data['elements']):
+                        if item.get('groupId') == grp_id:
+                            self.selected_element_indices.add(i)
+                else:
+                    self.selected_element_indices.add(idx)
             self.theme_data['selected_id'] = self.theme_data['elements'][idx]['id']
             self._sync_multi_selection_ids()
             self.element_list.setCurrentRow(idx)
@@ -7342,7 +7566,6 @@ class CyberPulseStudioGUI(QMainWindow):
             if hasattr(self, 'prop_scroll'):
                 self.prop_scroll.setVisible(True)
             self.prop_box.setVisible(True)
-            el = self.theme_data['elements'][idx]
             if hasattr(self, 'btn_lock_el'):
                 self.btn_lock_el.setText("🔓" if el.get('locked', False) else "🔒")
             if hasattr(self, 'btn_hide_el'):
@@ -7527,6 +7750,122 @@ class CyberPulseStudioGUI(QMainWindow):
             self.select_element_by_index(self.selected_element_idx, clear_others=False)
         self.save_theme_to_disk()
 
+    def toggle_group_selected_elements(self):
+        els = self.theme_data.get('elements', [])
+        targets = sorted(i for i in self.selected_element_indices if 0 <= i < len(els))
+        if not targets and self.selected_element_idx is not None and 0 <= self.selected_element_idx < len(els):
+            targets = [self.selected_element_idx]
+        if not targets:
+            return
+        self.push_undo_state("Grupla / Grubu Çöz")
+        existing_groups = {els[i].get('groupId') for i in targets if els[i].get('groupId')}
+        if existing_groups:
+            # Ungroup all elements belonging to any of the selected groups
+            for el in els:
+                if el.get('groupId') in existing_groups:
+                    el.pop('groupId', None)
+        elif len(targets) >= 2:
+            new_grp = f"grp_{int(time.time() * 1000) % 100000}"
+            for i in targets:
+                els[i]['groupId'] = new_grp
+        self.refresh_elements_list()
+        if self.selected_element_idx is not None:
+            self.select_element_by_index(self.selected_element_idx, clear_others=False)
+        self.save_theme_to_disk()
+
+    def on_top_brightness_changed(self, val):
+        pct = max(5, min(100, int(val)))
+        if hasattr(self, 'lbl_top_brightness_val'):
+            self.lbl_top_brightness_val.setText(f"{pct}%")
+        self.hardware.set_hardware_brightness(pct)
+        for ws in getattr(self, 'screen_workspaces', {}).values():
+            hw = ws.get('hardware')
+            if hw:
+                hw.set_hardware_brightness(pct)
+        self.app_settings['screen_brightness'] = pct
+        self.save_app_settings()
+
+    def toggle_screen_sleep_mode(self):
+        new_sleep = not bool(getattr(self.hardware, 'screen_sleeping', False))
+        self.hardware.screen_sleeping = new_sleep
+        for ws in getattr(self, 'screen_workspaces', {}).values():
+            hw = ws.get('hardware')
+            if hw:
+                hw.screen_sleeping = new_sleep
+        if hasattr(self, 'btn_top_sleep'):
+            self.btn_top_sleep.blockSignals(True)
+            self.btn_top_sleep.setChecked(new_sleep)
+            self.btn_top_sleep.blockSignals(False)
+
+    def on_visualizer_style_changed(self, idx):
+        if self.selected_element_idx is not None and 0 <= self.selected_element_idx < len(self.theme_data.get('elements', [])):
+            if not hasattr(self, 'combo_visualizer_style'):
+                return
+            style = self.combo_visualizer_style.itemData(idx) or 'bars'
+            self.push_undo_state("Ekolayzır Stili Değiştir")
+            self.theme_data['elements'][self.selected_element_idx]['visualizerStyle'] = style
+            self.save_theme_to_disk()
+            if hasattr(self, 'canvas_widget'):
+                self.canvas_widget.update()
+
+    def export_active_theme_animation(self):
+        """Records a smooth 36-frame live animated preview of the active theme as GIF or MP4."""
+        default_name = str(self.theme_data.get('name', 'cyberpulse_theme')).strip().replace(' ', '_')
+        out_path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "🎬 Hareketli GIF / MP4 Video Olarak Dışa Aktar",
+            f"{default_name}_preview.gif",
+            "Hareketli GIF (*.gif);;MP4 Video (*.mp4)"
+        )
+        if not out_path:
+            return
+        try:
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            frames = []
+            metrics = dict(self.sensor.get_sensors(refresh_interval_sec=0.1) or {})
+            base_spec = list(metrics.get('_audio_spectrum') or [0.25] * 24)
+            import math
+            for f_i in range(36):
+                phase = (f_i / 36.0) * math.tau
+                anim_metrics = dict(metrics)
+                anim_metrics['_audio_spectrum'] = [
+                    max(0.06, min(1.0, float(base_spec[b % len(base_spec)]) * 0.5 + 0.45 * abs(math.sin(phase + b * 0.38))))
+                    for b in range(24)
+                ]
+                frame_pil = self.hardware.render_theme_frame(self.theme_data, anim_metrics, for_hardware=False).convert('RGB')
+                frames.append(frame_pil)
+
+            if out_path.lower().endswith('.mp4'):
+                import cv2
+                import numpy as np
+                w, h = frames[0].size
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                writer = cv2.VideoWriter(out_path, fourcc, 15.0, (w, h))
+                for frm in frames:
+                    bgr = cv2.cvtColor(np.array(frm), cv2.COLOR_RGB2BGR)
+                    writer.write(bgr)
+                writer.release()
+            else:
+                if not out_path.lower().endswith('.gif'):
+                    out_path += '.gif'
+                frames[0].save(
+                    out_path,
+                    save_all=True,
+                    append_images=frames[1:],
+                    duration=65,
+                    loop=0,
+                    optimize=True
+                )
+            QApplication.restoreOverrideCursor()
+            QMessageBox.information(
+                self,
+                "🎬 Dışa Aktarma Tamamlandı",
+                f"Hareketli tema önizlemesi başarıyla kaydedildi:\n{out_path}"
+            )
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.warning(self, "Dışa Aktarma Hatası", f"Video/GIF oluşturulamadı:\n{e}")
+
     def update_prop_panel_visibility(self, el_type):
         """
         🎛️ Dynamically shows ONLY the controls relevant to the selected element type!
@@ -7538,16 +7877,21 @@ class CyberPulseStudioGUI(QMainWindow):
         self.widget_weather_settings.setVisible(el_type == 'weather_widget')
         if hasattr(self, 'widget_custom_image'):
             self.widget_custom_image.setVisible(el_type == 'custom_image')
+        if hasattr(self, 'widget_visualizer_style'):
+            self.widget_visualizer_style.setVisible(el_type == 'audio_visualizer')
         if hasattr(self, 'widget_ram_mode'):
             curr_el = None
             if self.selected_element_idx is not None and 0 <= self.selected_element_idx < len(self.theme_data.get('elements', [])):
                 curr_el = self.theme_data['elements'][self.selected_element_idx]
             curr_sid = str((curr_el or {}).get('sensorId', ''))
-            is_ram_sensor = (
+            is_ram_or_vram_sensor = (
                 el_type in ['sensor', 'gauge', 'vertical_gauge', 'circle_gauge', 'animated_fan', 'sparkline_graph']
-                and curr_sid in ('ram_used', 'ram_load', 'ram_free', 'ram_free_load', 'ram_used_both', 'ram_free_both')
+                and curr_sid in (
+                    'ram_used', 'ram_load', 'ram_free', 'ram_free_load', 'ram_used_both', 'ram_free_both',
+                    'gpu_vram_used', 'gpu_vram_load', 'gpu_vram_free', 'gpu_vram_free_load', 'gpu_vram_used_both', 'gpu_vram_free_both'
+                )
             )
-            self.widget_ram_mode.setVisible(is_ram_sensor)
+            self.widget_ram_mode.setVisible(is_ram_or_vram_sensor)
 
         if el_type == 'box':
             self.widget_sensor_type.setVisible(False)
@@ -7556,6 +7900,17 @@ class CyberPulseStudioGUI(QMainWindow):
             self.widget_colors.setVisible(True)
             self.btn_txt_col.setVisible(False)
             self.btn_pct_col.setVisible(False)
+            self.widget_dynamic_col.setVisible(False)
+            self.btn_custom_marquee.setVisible(False)
+            self.widget_bg_box.setVisible(True)
+        elif el_type == 'audio_visualizer':
+            self.widget_sensor_type.setVisible(False)
+            self.widget_txt_lbl.setVisible(True)
+            self.lbl_txt_title.setText("Başlık / Etiket:")
+            self.widget_font_controls.setVisible(True)
+            self.widget_colors.setVisible(True)
+            self.btn_txt_col.setVisible(True)
+            self.btn_pct_col.setVisible(True)
             self.widget_dynamic_col.setVisible(False)
             self.btn_custom_marquee.setVisible(False)
             self.widget_bg_box.setVisible(True)
@@ -7678,19 +8033,26 @@ class CyberPulseStudioGUI(QMainWindow):
         if s_idx >= 0:
             self.combo_sensor_type.setCurrentIndex(s_idx)
 
+        if hasattr(self, 'combo_visualizer_style'):
+            self.combo_visualizer_style.blockSignals(True)
+            vis_style = str(el.get('visualizerStyle', 'bars')).strip().lower()
+            vs_idx = self.combo_visualizer_style.findData(vis_style)
+            self.combo_visualizer_style.setCurrentIndex(vs_idx if vs_idx >= 0 else 0)
+            self.combo_visualizer_style.blockSignals(False)
+
         if hasattr(self, 'combo_ram_mode'):
             self.combo_ram_mode.blockSignals(True)
             ram_mode = str(el.get('ramDisplayMode', '')).strip()
             if not ram_mode:
-                if current_sensor == 'ram_load':
+                if current_sensor in ('ram_load', 'gpu_vram_load'):
                     ram_mode = 'used_pct'
-                elif current_sensor == 'ram_free':
+                elif current_sensor in ('ram_free', 'gpu_vram_free'):
                     ram_mode = 'free_gb'
-                elif current_sensor == 'ram_free_load':
+                elif current_sensor in ('ram_free_load', 'gpu_vram_free_load'):
                     ram_mode = 'free_pct'
-                elif current_sensor == 'ram_used_both':
+                elif current_sensor in ('ram_used_both', 'gpu_vram_used_both'):
                     ram_mode = 'used_both'
-                elif current_sensor == 'ram_free_both':
+                elif current_sensor in ('ram_free_both', 'gpu_vram_free_both'):
                     ram_mode = 'free_both'
                 else:
                     ram_mode = 'used_gb'
@@ -7841,18 +8203,18 @@ class CyberPulseStudioGUI(QMainWindow):
             new_sensor = self.combo_sensor_type.itemData(idx)
             el = self.theme_data['elements'][self.selected_element_idx]
             el['sensorId'] = new_sensor
-            if new_sensor == 'ram_used':
+            if new_sensor in ('ram_used', 'gpu_vram_used'):
                 el['ramDisplayMode'] = 'used_gb'
-            elif new_sensor == 'ram_load':
+            elif new_sensor in ('ram_load', 'gpu_vram_load'):
                 el['ramDisplayMode'] = 'used_pct'
-            elif new_sensor == 'ram_free':
+            elif new_sensor in ('ram_free', 'gpu_vram_free'):
                 el['ramDisplayMode'] = 'free_gb'
             self.load_element_properties(el)
             self.refresh_elements_list()
             self.save_theme_to_disk()
 
     def on_ram_mode_changed(self, idx):
-        """Allows the user to choose whether a RAM widget displays Used vs Free RAM (GB, %, or Both) with matching bar fill."""
+        """Allows the user to choose whether a RAM or GPU VRAM widget displays Used vs Free memory (GB, %, or Both) with matching bar fill."""
         if self.selected_element_idx is not None and 0 <= self.selected_element_idx < len(self.theme_data['elements']):
             if not hasattr(self, 'combo_ram_mode'):
                 return
@@ -7862,31 +8224,41 @@ class CyberPulseStudioGUI(QMainWindow):
             self.push_undo_state("RAM Gösterim Modu Değiştir")
             el = self.theme_data['elements'][self.selected_element_idx]
             el['ramDisplayMode'] = mode
+            is_vram = str(el.get('sensorId', '')).startswith('gpu_vram_')
+            prefix = 'gpu_vram' if is_vram else 'ram'
             # Keep sensorId in sync for clarity & sparkline history
             if mode == 'used_gb':
-                el['sensorId'] = 'ram_used'
+                el['sensorId'] = f'{prefix}_used'
             elif mode == 'used_pct':
-                el['sensorId'] = 'ram_load'
+                el['sensorId'] = f'{prefix}_load'
             elif mode == 'used_both':
-                el['sensorId'] = 'ram_used'
+                el['sensorId'] = f'{prefix}_used'
             elif mode == 'free_gb':
-                el['sensorId'] = 'ram_free'
+                el['sensorId'] = f'{prefix}_free'
             elif mode == 'free_pct':
-                el['sensorId'] = 'ram_free'
+                el['sensorId'] = f'{prefix}_free'
             elif mode == 'free_both':
-                el['sensorId'] = 'ram_free'
+                el['sensorId'] = f'{prefix}_free'
 
-            # Auto-update default Turkish/English RAM label if the user hasn't customized it to something unrelated
+            # Auto-update default Turkish/English RAM/VRAM label if the user hasn't customized it to something unrelated
             curr_lbl = str(el.get('label', '')).strip()
             default_ram_labels = {
                 'RAM Kullanımı (GB)', 'RAM Yükü (%)', 'Kalan / Boş RAM (GB)',
-                'RAM Kullanımı', 'Kalan RAM', 'Boş RAM', 'RAM Used (GB)', 'RAM Load (%)', 'Free RAM (GB)'
+                'RAM Kullanımı', 'Kalan RAM', 'Boş RAM', 'RAM Used (GB)', 'RAM Load (%)', 'Free RAM (GB)',
+                'GPU VRAM Kullanımı (GB)', 'GPU Kalan / Boş VRAM (GB)', 'GPU VRAM Kullanımı', 'Kalan VRAM',
+                'GPU VRAM Used (GB)', 'Free GPU VRAM (GB)'
             }
             if curr_lbl in default_ram_labels:
-                if mode.startswith('free_'):
-                    el['label'] = 'Kalan / Boş RAM (GB)' if mode == 'free_gb' else 'Kalan RAM'
+                if is_vram:
+                    if mode.startswith('free_'):
+                        el['label'] = 'GPU Kalan / Boş VRAM (GB)' if mode == 'free_gb' else 'Kalan VRAM'
+                    else:
+                        el['label'] = 'GPU VRAM Kullanımı (GB)' if mode == 'used_gb' else 'GPU VRAM Kullanımı'
                 else:
-                    el['label'] = 'RAM Kullanımı (GB)' if mode == 'used_gb' else 'RAM Kullanımı'
+                    if mode.startswith('free_'):
+                        el['label'] = 'Kalan / Boş RAM (GB)' if mode == 'free_gb' else 'Kalan RAM'
+                    else:
+                        el['label'] = 'RAM Kullanımı (GB)' if mode == 'used_gb' else 'RAM Kullanımı'
                 self.txt_label.blockSignals(True)
                 self.txt_label.setText(el['label'])
                 self.txt_label.blockSignals(False)
@@ -8642,6 +9014,32 @@ class CyberPulseStudioGUI(QMainWindow):
         return None, None, None
 
     def on_gui_tick(self):
+        # 🌙 Automatic Screen Standby when Windows is Locked (Win+L / Screensaver)
+        if self.app_settings.get('sleep_on_lock', True):
+            try:
+                h_desk = ctypes.windll.user32.OpenInputDesktop(0, False, 0x0100)
+                is_locked = (h_desk == 0)
+                if h_desk:
+                    ctypes.windll.user32.CloseDesktop(h_desk)
+                was_auto_sleeping = getattr(self, '_auto_lock_sleeping', False)
+                if is_locked and not was_auto_sleeping:
+                    self._auto_lock_sleeping = True
+                    self.hardware.screen_sleeping = True
+                    for ws in getattr(self, 'screen_workspaces', {}).values():
+                        hw = ws.get('hardware')
+                        if hw:
+                            hw.screen_sleeping = True
+                elif not is_locked and was_auto_sleeping:
+                    self._auto_lock_sleeping = False
+                    manual_sleep = hasattr(self, 'btn_top_sleep') and self.btn_top_sleep.isChecked()
+                    self.hardware.screen_sleeping = manual_sleep
+                    for ws in getattr(self, 'screen_workspaces', {}).values():
+                        hw = ws.get('hardware')
+                        if hw:
+                            hw.screen_sleeping = manual_sleep
+            except Exception:
+                pass
+
         # 🎮 Automatic Per-Game Profile & 3D Game Theme Switcher
         if self.app_settings.get('auto_game_theme_enabled', True):
             try:
@@ -8809,9 +9207,15 @@ if __name__ == '__main__':
         time.sleep(0.3)
         app = QApplication(sys.argv)
         gui = CyberPulseStudioGUI()
-        gui.show()
-        gui.raise_()
-        gui.activateWindow()
+        init_bright = max(5, min(100, int(gui.app_settings.get('screen_brightness', 100))))
+        gui.hardware.set_hardware_brightness(init_bright)
+        start_in_tray = ("--minimized" in sys.argv) or bool(gui.app_settings.get('start_minimized', False))
+        if start_in_tray and gui.app_settings.get('enable_tray', True) and getattr(gui, 'tray_icon', None):
+            gui.hide()
+        else:
+            gui.show()
+            gui.raise_()
+            gui.activateWindow()
         sys.exit(app.exec_())
     except Exception as e:
         print("Fatal launch error:", e)

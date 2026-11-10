@@ -10,7 +10,7 @@ import colorsys
 import re
 import threading
 import psutil
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
 # 🔒 SECURITY: Protect against Decompression Bomb (ImageBomb) attacks (max ~8K 7680x4320 = 33.1M pixels)
 Image.MAX_IMAGE_PIXELS = 33_177_600
@@ -701,6 +701,11 @@ class HardwareDriver:
 
         self.render_lock = threading.RLock()
         self._is_sending = False
+        self.brightness_pct = 100
+        self.screen_sleeping = False
+
+    def set_hardware_brightness(self, pct):
+        self.brightness_pct = max(0, min(100, int(pct)))
 
     def set_resolution(self, width, height):
         with self.render_lock:
@@ -1234,6 +1239,9 @@ class HardwareDriver:
                     elif s_id == 'gpu_temp':
                         vector_icon_name = 'temp'
                         display_metric = val if '°C' in val else f"{val}°C"
+                    elif s_id == 'gpu_hotspot':
+                        vector_icon_name = 'temp'
+                        display_metric = val if '°C' in val else f"{val}°C"
                     elif s_id == 'cpu_load':
                         vector_icon_name = 'cpu'
                         display_metric = val if '%' in val else f"{val}%"
@@ -1249,6 +1257,56 @@ class HardwareDriver:
                     elif s_id == 'cpu_fan':
                         vector_icon_name = 'fan'
                         display_metric = val if ('RPM' in val or '%' in val) else f"{val} RPM"
+                    elif s_id in ('gpu_vram_used', 'gpu_vram_load', 'gpu_vram_free', 'gpu_vram_free_load', 'gpu_vram_used_both', 'gpu_vram_free_both'):
+                        vector_icon_name = 'gpu'
+                        vram_mode = str(el.get('ramDisplayMode') or '').strip()
+                        if vram_mode not in ('used_gb', 'used_pct', 'used_both', 'free_gb', 'free_pct', 'free_both'):
+                            default_vmode_map = {
+                                'gpu_vram_used': 'used_gb',
+                                'gpu_vram_load': 'used_pct',
+                                'gpu_vram_used_both': 'used_both',
+                                'gpu_vram_free': 'free_gb',
+                                'gpu_vram_free_load': 'free_pct',
+                                'gpu_vram_free_both': 'free_both',
+                            }
+                            vram_mode = default_vmode_map.get(s_id, 'used_gb')
+
+                        raw_v_used_pct = sensor_metrics.get('_vram_used_pct_num')
+                        if raw_v_used_pct is None:
+                            try:
+                                raw_vl = str(sensor_metrics.get('gpu_vram_load', '22%')).replace('%', '').strip()
+                                raw_v_used_pct = max(0, min(100, int(round(float(raw_vl)))))
+                            except Exception:
+                                raw_v_used_pct = 22
+                        v_used_pct_num = max(0, min(100, int(raw_v_used_pct)))
+                        v_free_pct_num = max(0, min(100, int(sensor_metrics.get('_vram_free_pct_num', 100 - v_used_pct_num))))
+
+                        if vram_mode == 'used_gb':
+                            u_str = str(sensor_metrics.get('gpu_vram_used', val))
+                            display_metric = u_str if 'GB' in u_str else f"{u_str} GB"
+                            bar_pct_override = v_used_pct_num
+                        elif vram_mode == 'used_pct':
+                            display_metric = f"{v_used_pct_num}%"
+                            bar_pct_override = v_used_pct_num
+                        elif vram_mode == 'used_both':
+                            u_str = str(sensor_metrics.get('gpu_vram_used', '2.6 GB'))
+                            if 'GB' not in u_str:
+                                u_str = f"{u_str} GB"
+                            display_metric = str(sensor_metrics.get('gpu_vram_used_both') or f"{u_str} ({v_used_pct_num}%)")
+                            bar_pct_override = v_used_pct_num
+                        elif vram_mode == 'free_gb':
+                            f_str = str(sensor_metrics.get('gpu_vram_free', '9.4 GB'))
+                            display_metric = f_str if 'GB' in f_str else f"{f_str} GB"
+                            bar_pct_override = v_free_pct_num
+                        elif vram_mode == 'free_pct':
+                            display_metric = f"{v_free_pct_num}%"
+                            bar_pct_override = v_free_pct_num
+                        elif vram_mode == 'free_both':
+                            f_str = str(sensor_metrics.get('gpu_vram_free', '9.4 GB'))
+                            if 'GB' not in f_str:
+                                f_str = f"{f_str} GB"
+                            display_metric = str(sensor_metrics.get('gpu_vram_free_both') or f"{f_str} ({v_free_pct_num}%)")
+                            bar_pct_override = v_free_pct_num
                     elif s_id in ('ram_used', 'ram_load', 'ram_free', 'ram_free_load', 'ram_used_both', 'ram_free_both'):
                         vector_icon_name = 'ram'
                         ram_mode = str(el.get('ramDisplayMode') or '').strip()
@@ -1434,14 +1492,20 @@ class HardwareDriver:
                                 hist_key = 'ram_free_load'
                             else:
                                 hist_key = 'ram_load'
+                        elif s_id in ('gpu_vram_used', 'gpu_vram_load', 'gpu_vram_free', 'gpu_vram_free_load', 'gpu_vram_used_both', 'gpu_vram_free_both'):
+                            v_m = str(el.get('ramDisplayMode') or '').strip()
+                            if v_m in ('free_gb', 'free_pct', 'free_both') or s_id in ('gpu_vram_free', 'gpu_vram_free_load', 'gpu_vram_free_both'):
+                                hist_key = 'gpu_vram_free_load'
+                            else:
+                                hist_key = 'gpu_vram_load'
                         series = list(hist_dict.get(hist_key, []))
                         if len(series) < 2:
                             series = [float(num_val)] * 20
 
                         # Determine dynamic or fixed range
-                        if hist_key in ('cpu_load', 'gpu_load', 'ram_load', 'ram_free_load', 'gpu_fan'):
+                        if hist_key in ('cpu_load', 'gpu_load', 'ram_load', 'ram_free_load', 'gpu_vram_load', 'gpu_vram_free_load', 'gpu_fan'):
                             lo_v, hi_v = 0.0, 100.0
-                        elif s_id in ('cpu_temp', 'gpu_temp'):
+                        elif s_id in ('cpu_temp', 'gpu_temp', 'gpu_hotspot'):
                             lo_v, hi_v = 30.0, 95.0
                         else:
                             lo_v = min(series)
@@ -1665,6 +1729,63 @@ class HardwareDriver:
                         draw_aligned_text(draw_img, lbl_font, event_title, el_x, el_y + 4, el_w, el_h // 2, fill=text_rgb, align='center', icon_name='calendar')
                         draw_aligned_text(draw_img, val_font, cd_str, el_x, el_y + el_h // 2, el_w, el_h // 2 - 4, fill=pct_rgb, align='center')
 
+                    # 🎛️ CANLI SES / MÜZİK EKOLAYZIRI (WASAPI SPECTRUM BARS & WAVE)
+                    elif el_type == 'audio_visualizer':
+                        _draw_el_border()
+                        spec = sensor_metrics.get('_audio_spectrum')
+                        if not isinstance(spec, list) or len(spec) < 8:
+                            spec = [0.15 + 0.1 * math.sin(t_now * 3.0 + i * 0.4) for i in range(24)]
+                        vis_style = str(el.get('visualizerStyle') or 'bars').strip().lower()
+                        hdr_h = 0
+                        if lbl_text:
+                            hdr_h = max(16, min(el_h // 3, int(lbl_f_size * 1.25)))
+                            lvl_str = str(sensor_metrics.get('audio_level', '0%'))
+                            draw_label_and_value_row(draw_img, lbl_font, val_font, lbl_text, lvl_str, el_x, el_y + 2, el_w, hdr_h, text_rgb, pct_rgb)
+
+                        vx0 = el_x + 8
+                        vy0 = el_y + hdr_h + 6
+                        vx1 = el_x + el_w - 8
+                        vy1 = el_y + el_h - 6
+                        vw = max(20, vx1 - vx0)
+                        vh = max(12, vy1 - vy0)
+
+                        if vis_style == 'wave':
+                            mid_y = vy0 + vh // 2
+                            pts_main = []
+                            pts_sub = []
+                            n_sp = len(spec)
+                            for idx_b, bv in enumerate(spec):
+                                px = vx0 + int((idx_b / float(max(1, n_sp - 1))) * vw)
+                                amp = float(bv) * (vh * 0.46)
+                                ph = math.sin(t_now * 7.5 + idx_b * 0.55)
+                                py1 = int(mid_y + amp * ph)
+                                py2 = int(mid_y - amp * 0.65 * math.cos(t_now * 5.2 + idx_b * 0.4))
+                                pts_main.append((px, max(vy0, min(vy1, py1))))
+                                pts_sub.append((px, max(vy0, min(vy1, py2))))
+                            if len(pts_main) >= 2:
+                                poly_w = [(pts_main[0][0], mid_y)] + pts_main + [(pts_main[-1][0], mid_y)]
+                                draw_img.polygon(poly_w, fill=(gfx_rgb[0], gfx_rgb[1], gfx_rgb[2], 55))
+                                draw_img.line(pts_sub, fill=pct_rgb, width=2)
+                                draw_img.line(pts_main, fill=gfx_rgb, width=3)
+                        else:
+                            n_bars = min(len(spec), max(8, min(24, vw // 10)))
+                            gap = max(2, int(vw * 0.018))
+                            bar_w = max(3, (vw - gap * (n_bars - 1)) // n_bars)
+                            total_bw = n_bars * bar_w + (n_bars - 1) * gap
+                            start_bx = vx0 + max(0, (vw - total_bw) // 2)
+                            for b_i in range(n_bars):
+                                s_val = float(spec[int(b_i * len(spec) / n_bars)])
+                                bh = max(3, int(round(s_val * vh)))
+                                bx = start_bx + b_i * (bar_w + gap)
+                                by = vy1 - bh
+                                # Track background
+                                draw_img.rounded_rectangle([bx, vy0, bx + bar_w, vy1], radius=2, fill=(30, 41, 59, 95))
+                                # Active spectrum bar
+                                draw_img.rounded_rectangle([bx, by, bx + bar_w, vy1], radius=2, fill=gfx_rgb)
+                                # Bright peak cap
+                                cap_y = max(vy0, by - 4)
+                                draw_img.rectangle([bx, cap_y, bx + bar_w, min(vy1, cap_y + 2)], fill=pct_rgb)
+
                     # 🔲 BOX / BORDER
                     elif el_type == 'box':
                         _draw_el_border()
@@ -1721,6 +1842,19 @@ class HardwareDriver:
             # Cache last frame for RGB Ambilight sampling
             self.last_rendered_frame = img
             self.latest_metrics = sensor_metrics
+
+            # 🌙 Screen Sleep / Standby Mode (DPMS / Windows Lock IPS Protection)
+            if (self.screen_sleeping or bool(theme_data.get('_screen_sleeping', False))) and for_hardware:
+                img = Image.new('RGB', (w, h), (0, 0, 0))
+            else:
+                # ☀ Hardware & Frame Brightness Control (5% - 100%)
+                b_pct = safe_int(theme_data.get('brightness_pct', self.brightness_pct), self.brightness_pct)
+                b_pct = max(5, min(100, b_pct))
+                if b_pct < 100:
+                    try:
+                        img = ImageEnhance.Brightness(img).enhance(b_pct / 100.0)
+                    except Exception:
+                        pass
 
             # Rotate frame for hardware streaming orientation (GUI preview remains 0° upright)
             if for_hardware:
