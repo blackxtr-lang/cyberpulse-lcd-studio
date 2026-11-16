@@ -14,7 +14,7 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-00a6e0?style=flat-square&logo=windows&logoColor=white)](#)
 [![UI Languages](https://img.shields.io/badge/UI%20%2F%20Aray%C3%BCz-T%C3%BCrk%C3%A7e%20%7C%20English-8083ff?style=flat-square)](#)
-[![License: MIT](https://img.shields.io/badge/License%20%2F%20Lisans-MIT-4edea3?style=flat-square)](LICENSE)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License%20%2F%20Lisans-CC%20BY--NC--SA%204.0%20(Ticari%20Olmayan)-ef4444?style=flat-square)](LICENSE)
 
 <br/>
 
@@ -140,6 +140,7 @@ python cyberpulse_studio/main_gui.py
 
 ---
 
-## 📄 Lisans / License
+## 📄 Lisans / License (CC BY-NC-SA 4.0 — Ticari Kullanım Yasaktır / Non-Commercial Only)
 
-Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır. / Licensed under the [MIT License](LICENSE).
+- **🇹🇷 Türkçe:** Bu proje **[Creative Commons Atıf-GayriTicari-AynıLisanslaPaylaş 4.0 Uluslararası (CC BY-NC-SA 4.0)](LICENSE)** lisansı altında lisanslanmıştır. **Hiçbir ticari kullanıma izin verilmez** (yazılımın veya türevlerinin para karşılığı satılması, ücretli donanım/ekran paketleriyle ticari olarak dağıtılması veya ticari bir ürün/hizmetin parçası yapılması kesinlikle yasaktır). Değiştirilen veya geliştirilen türev çalışmalar da kaynak belirtilerek aynı ticari olmayan lisansla (`CC BY-NC-SA 4.0`) paylaşılmak zorundadır.
+- **🇬🇧 English:** This project is licensed under the **[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](LICENSE)** license. **Commercial use of any kind is strictly prohibited** (selling the software or derivatives, bundling it commercially with hardware/LCD displays, or using it in commercial products/services is forbidden). Any modifications or derivative works must give appropriate credit and be distributed under the same non-commercial license (`CC BY-NC-SA 4.0`).
