@@ -141,7 +141,7 @@ RGB_APP_SCRIPT = os.path.join(APP_BUNDLE_DIR, 'rgb_studio_gui.py')
 VERSION_FILE = os.path.join(APP_BUNDLE_DIR, 'version.json')
 os.makedirs(PRESET_THEMES_DIR, exist_ok=True)
 
-APP_VERSION = "1.4.3"
+APP_VERSION = "1.5.0"
 try:
     if os.path.isfile(VERSION_FILE) and os.path.getsize(VERSION_FILE) <= 16384:
         with open(VERSION_FILE, 'r', encoding='utf-8') as _vf:
@@ -2595,6 +2595,21 @@ class AppSettingsDialog(QDialog):
         box_offset.addWidget(self.spin_cpu_offset)
         alert_layout.addLayout(box_offset)
 
+        box_low_fps = QHBoxLayout()
+        lbl_lfps = QLabel("📉 Oyun İçi Düşük FPS Uyarı Eşiği (0=Kapalı):")
+        lbl_lfps.setStyleSheet("color: #dae2fd; font-size: 11px; font-weight: 700; border: none;")
+        box_low_fps.addWidget(lbl_lfps)
+        self.spin_low_fps_alert = QSpinBox()
+        self.spin_low_fps_alert.setRange(0, 240)
+        self.spin_low_fps_alert.setValue(int(self.gui.theme_data.get('low_fps_alert_limit', self.gui.app_settings.get('low_fps_alert_limit', 0))))
+        box_low_fps.addWidget(self.spin_low_fps_alert)
+        alert_layout.addLayout(box_low_fps)
+
+        self.chk_thermal_sound_alert = QCheckBox("🔔 Kritik Sıcaklık / Düşük FPS Uyarısında Sesli Bip & Bildirim Göster")
+        self.chk_thermal_sound_alert.setChecked(bool(self.gui.app_settings.get('thermal_sound_alert', False)))
+        self.chk_thermal_sound_alert.setStyleSheet("color: #fbbf24; font-size: 11px; font-weight: 700; border: none;")
+        alert_layout.addWidget(self.chk_thermal_sound_alert)
+
         w_box = QHBoxLayout()
         lbl_w = QLabel("📍 Hava Durumu İl/İlçe:")
         lbl_w.setStyleSheet("color: #dae2fd; font-size: 11px; font-weight: 700; border: none;")
@@ -2815,6 +2830,12 @@ class AppSettingsDialog(QDialog):
             self.gui.app_settings['cpu_temp_offset'] = self.spin_cpu_offset.value()
             if hasattr(self.gui, 'sensor'):
                 self.gui.sensor.cpu_temp_offset = self.spin_cpu_offset.value()
+
+            if hasattr(self, 'spin_low_fps_alert'):
+                self.gui.app_settings['low_fps_alert_limit'] = self.spin_low_fps_alert.value()
+                self.gui.theme_data['low_fps_alert_limit'] = self.spin_low_fps_alert.value()
+            if hasattr(self, 'chk_thermal_sound_alert'):
+                self.gui.app_settings['thermal_sound_alert'] = self.chk_thermal_sound_alert.isChecked()
 
             w_loc_val = self.spin_weather_city.text().strip()
             self.gui.app_settings['custom_weather_location'] = w_loc_val
@@ -3833,6 +3854,16 @@ class InteractiveCanvasWidget(QWidget):
         elif key == Qt.Key_S and (mods & Qt.ControlModifier):
             if hasattr(self.app, 'save_layout_to_current_theme_only'):
                 self.app.save_layout_to_current_theme_only(silent=False)
+            event.accept()
+            return
+        elif key == Qt.Key_C and (mods & Qt.ControlModifier) and (mods & Qt.ShiftModifier):
+            if hasattr(self.app, 'copy_selected_element_style'):
+                self.app.copy_selected_element_style()
+            event.accept()
+            return
+        elif key == Qt.Key_V and (mods & Qt.ControlModifier) and (mods & Qt.ShiftModifier):
+            if hasattr(self.app, 'paste_style_to_selected_elements'):
+                self.app.paste_style_to_selected_elements()
             event.accept()
             return
         super().keyPressEvent(event)
@@ -6012,8 +6043,8 @@ class CyberPulseStudioGUI(QMainWindow):
 
         self.combo_port = QComboBox()
         self.combo_port.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.combo_port.setMinimumWidth(128)
-        self.combo_port.setMaximumWidth(165)
+        self.combo_port.setMinimumWidth(152)
+        self.combo_port.setMaximumWidth(175)
         self.combo_port.setStyleSheet("background: #131b2e; border: none; border-radius: 4px; padding: 2px 6px; color: #4edea3; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800;")
         self.combo_port.currentIndexChanged.connect(self.on_port_selection_changed)
         pp_lay.addWidget(self.combo_port)
@@ -6317,20 +6348,27 @@ class CyberPulseStudioGUI(QMainWindow):
             ("📈 Canlı Çizgi Grafik (Sparkline)", "cpu_temp", "sparkline_graph", "60s Geçmiş", "#8083ff", "rgba(128,131,255,0.18)"),
             ("🖼️ Özel Resim / Logo / İkon Katmanı", "custom_image", "custom_image", "PNG / WebP / GIF", "#c0c1ff", "rgba(128,131,255,0.18)"),
             ("🎮 FPS Göstergesi", "game_fps", "sensor", "RTSS Hook", "#4edea3", "rgba(0,136,93,0.20)"),
+            ("🎯 1% Low FPS Göstergesi", "game_fps_1low", "sensor", "Akıcılık Analizi", "#4edea3", "rgba(0,136,93,0.20)"),
+            ("📉 Frametime (ms) Gecikmesi", "game_frametime", "sensor", "Kare Süresi (ms)", "#fbbf24", "rgba(251,191,36,0.18)"),
             ("🌡️ CPU Sıcaklığı", "cpu_temp", "sensor", "Core Tctl/Tdie", "#7bd0ff", "rgba(0,166,224,0.18)"),
             ("⚡ CPU Kullanımı (%)", "cpu_load", "sensor", "Tüm Çekirdekler", "#7bd0ff", "rgba(0,166,224,0.18)"),
             ("🚀 CPU Frekansı (MHz)", "cpu_clock", "sensor", "Boost Saati", "#7bd0ff", "rgba(0,166,224,0.18)"),
+            ("🔌 CPU Paket Gücü (W)", "cpu_power", "sensor", "TDP Watt Tüketimi", "#7bd0ff", "rgba(0,166,224,0.18)"),
             ("🌀 CPU Fan Hızı (RPM)", "cpu_fan", "sensor", "PWM Anakart", "#7bd0ff", "rgba(0,166,224,0.18)"),
+            ("💧 Sıvı Soğutma (AIO) Sıcaklığı", "aio_temp", "sensor", "Soğutucu Sıvı °C", "#38bdf8", "rgba(56,189,248,0.18)"),
+            ("🛡️ Anakart / VRM Sıcaklığı", "mobo_temp", "sensor", "Anakart Sensörü", "#c0c1ff", "rgba(128,131,255,0.18)"),
             ("🔥 GPU Sıcaklığı", "gpu_temp", "sensor", "GPU Çekirdek", "#ffb4ab", "rgba(239,68,68,0.18)"),
             ("🔥 GPU Hotspot Sıcaklığı", "gpu_hotspot", "sensor", "GPU Tjunction", "#ffb4ab", "rgba(239,68,68,0.18)"),
             ("🎮 GPU Kullanımı (%)", "gpu_load", "sensor", "3D Motor Yükü", "#ffb4ab", "rgba(239,68,68,0.18)"),
+            ("🔌 GPU Güç Tüketimi (W)", "gpu_power", "sensor", "Ekran Kartı Watt", "#ffb4ab", "rgba(239,68,68,0.18)"),
             ("🌀 GPU Fan Hızı (%)", "gpu_fan", "sensor", "Soğutucu Fan", "#ffb4ab", "rgba(239,68,68,0.18)"),
             ("🎮 GPU VRAM Kullanımı (GB)", "gpu_vram_used", "sensor", "Ekran Kartı Belleği", "#ffb4ab", "rgba(239,68,68,0.18)"),
             ("🎮 GPU Kalan / Boş VRAM (GB)", "gpu_vram_free", "sensor", "Boş VRAM Belleği", "#4edea3", "rgba(0,136,93,0.20)"),
             ("💾 RAM Kullanımı (GB)", "ram_used", "sensor", "Kullanılan Bellek", "#c0c1ff", "rgba(128,131,255,0.18)"),
             ("💾 Kalan / Boş RAM (GB)", "ram_free", "sensor", "Kalan Boş Bellek", "#4edea3", "rgba(0,136,93,0.20)"),
             ("💿 Disk Okuma/Yazma (MB/s)", "disk_io", "sensor", "NVMe / SATA I/O", "#4edea3", "rgba(0,136,93,0.20)"),
-            ("⏳ Sistem Açık Kalma Süresi", "system_uptime", "sensor", "Çalışma Süresi", "#908fa0", "rgba(144,143,160,0.16)"),
+            ("⏳ Sistem Açık Kalma Süresi", "system_uptime", "sensor", "PC Uptime Sayacı", "#908fa0", "rgba(144,143,160,0.16)"),
+            ("🕹️ Aktif Oyun Oturum Süresi", "game_session_time", "sensor", "Oyun Süresi Sayacı", "#4edea3", "rgba(0,136,93,0.20)"),
             ("📥 İndirme Hızı (Download)", "net_down", "sensor", "Canlı Ağ Akışı", "#4edea3", "rgba(0,136,93,0.20)"),
             ("📤 Yükleme Hızı (Upload)", "net_up", "sensor", "Canlı Ağ Akışı", "#7bd0ff", "rgba(0,166,224,0.18)"),
             ("📶 İnternet Ping (ms)", "net_ping", "sensor", "Gecikme (ms)", "#4edea3", "rgba(0,136,93,0.20)"),
@@ -6353,13 +6391,19 @@ class CyberPulseStudioGUI(QMainWindow):
         default_lbl_map = {
             "audio_level": "SES SPEKTRUMU",
             "game_fps": "FPS",
+            "game_fps_1low": "1% LOW FPS",
+            "game_frametime": "FRAMETIME",
             "cpu_temp": "CPU",
             "cpu_load": "CPU YÜK",
             "cpu_clock": "CPU MHZ",
+            "cpu_power": "CPU GÜÇ",
             "cpu_fan": "CPU FAN",
+            "aio_temp": "AIO SIVI",
+            "mobo_temp": "ANAKART",
             "gpu_temp": "GPU",
             "gpu_hotspot": "GPU HOTSPOT",
             "gpu_load": "GPU YÜK",
+            "gpu_power": "GPU GÜÇ",
             "gpu_fan": "GPU FAN",
             "gpu_vram_used": "VRAM",
             "gpu_vram_load": "VRAM",
@@ -6371,6 +6415,7 @@ class CyberPulseStudioGUI(QMainWindow):
             "ram_free_load": "BOŞ RAM",
             "disk_io": "DİSK",
             "system_uptime": "AÇIK SÜRE",
+            "game_session_time": "OYUN SÜRESİ",
             "net_down": "İNDİRME",
             "net_up": "YÜKLEME",
             "net_ping": "PING",
@@ -6477,6 +6522,7 @@ class CyberPulseStudioGUI(QMainWindow):
         canvas_toolbar.setSpacing(5)
 
         self.btn_undo = QPushButton("↶ Geri")
+        self.btn_undo.setMinimumWidth(64)
         self.btn_undo.setToolTip("Son işlemi geri al (Ctrl+Z)")
         self.btn_undo.setEnabled(False)
         self.btn_undo.setStyleSheet("background: #171f33; color: #dae2fd; border: none; border-radius: 5px; padding: 3px 6px; font-size: 10px; font-weight: 800;")
@@ -6484,6 +6530,7 @@ class CyberPulseStudioGUI(QMainWindow):
         canvas_toolbar.addWidget(self.btn_undo)
 
         self.btn_redo = QPushButton("↷ İleri")
+        self.btn_redo.setMinimumWidth(64)
         self.btn_redo.setToolTip("Geri alınan işlemi yinele (Ctrl+Y)")
         self.btn_redo.setEnabled(False)
         self.btn_redo.setStyleSheet("background: #171f33; color: #dae2fd; border: none; border-radius: 5px; padding: 3px 6px; font-size: 10px; font-weight: 800;")
@@ -6502,6 +6549,7 @@ class CyberPulseStudioGUI(QMainWindow):
 
         self.lbl_center_ws_title = QLabel(f"🎨 {self.theme_data.get('name', 'Özel')}")
         self.lbl_center_ws_title.setStyleSheet("color: #908fa0; font-size: 10px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_center_ws_title.setVisible(False)
         canvas_toolbar.addWidget(self.lbl_center_ws_title)
 
         canvas_toolbar.addStretch()
@@ -6716,6 +6764,36 @@ class CyberPulseStudioGUI(QMainWindow):
 
         right_layout.addWidget(align_strip)
 
+        # 🎨 Global Color Palette & 🖌️ Widget Style Copy/Paste Strip (#060e20)
+        style_strip = QFrame()
+        style_strip.setStyleSheet("QFrame { background-color: #060e20; border: 1px solid #1e293b; border-radius: 7px; }")
+        style_bar_box = QHBoxLayout(style_strip)
+        style_bar_box.setContentsMargins(8, 4, 8, 4)
+        style_bar_box.setSpacing(4)
+
+        btn_quick_palette = QPushButton("🎨 Tema Renk Paleti")
+        btn_quick_palette.setToolTip("Tek tıkla bu temadaki tüm araçların renk paletini uyumlu şekilde değiştirin")
+        btn_quick_palette.setStyleSheet("QPushButton { background: rgba(128, 131, 255, 0.16); color: #c0c1ff; border: 1px solid rgba(128, 131, 255, 0.35); border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: 800; } QPushButton:hover { background: #8083ff; color: #07006c; }")
+        btn_quick_palette.clicked.connect(self.open_quick_color_palette_dialog)
+        style_bar_box.addWidget(btn_quick_palette)
+
+        style_bar_box.addStretch()
+
+        btn_copy_style = QPushButton("🖌 Stil Kopyala")
+        btn_copy_style.setToolTip("Seçili ögenin yazı tipi, renk, çerçeve ve animasyon stilini kopyalar (Ctrl+Shift+C)")
+        btn_copy_style.setStyleSheet(align_btn_qss)
+        btn_copy_style.clicked.connect(self.copy_selected_element_style)
+        style_bar_box.addWidget(btn_copy_style)
+
+        self.btn_paste_style = QPushButton("📋 Yapıştır")
+        self.btn_paste_style.setMinimumWidth(86)
+        self.btn_paste_style.setToolTip("Kopyalanan görsel stili seçili öge(ler)e uygular (Ctrl+Shift+V)")
+        self.btn_paste_style.setStyleSheet(align_btn_qss)
+        self.btn_paste_style.clicked.connect(self.paste_style_to_selected_elements)
+        style_bar_box.addWidget(self.btn_paste_style)
+
+        right_layout.addWidget(style_strip)
+
         lbl_insp_sec = QLabel("SEÇİLİ ÖGE AYARLARI")
         lbl_insp_sec.setStyleSheet("color: #c0c1ff; font-size: 10px; font-weight: 900; letter-spacing: 0.8px; border: none; background: transparent; margin-top: 2px;")
         right_layout.addWidget(lbl_insp_sec)
@@ -6757,13 +6835,19 @@ class CyberPulseStudioGUI(QMainWindow):
         self.combo_sensor_type.setMinimumContentsLength(14)
         sensor_options = [
             ("🎮 FPS Göstergesi", "game_fps"),
+            ("🎯 1% Low FPS Göstergesi", "game_fps_1low"),
+            ("📉 Frametime (ms) Gecikmesi", "game_frametime"),
             ("🌡️ CPU Sıcaklığı", "cpu_temp"),
             ("⚡ CPU Kullanımı (%)", "cpu_load"),
             ("🚀 CPU Frekansı (MHz)", "cpu_clock"),
+            ("🔌 CPU Paket Gücü (W)", "cpu_power"),
             ("🌀 CPU Fan Hızı (RPM)", "cpu_fan"),
+            ("💧 Sıvı Soğutma (AIO) Sıcaklığı", "aio_temp"),
+            ("🛡️ Anakart / VRM Sıcaklığı", "mobo_temp"),
             ("🔥 GPU Sıcaklığı", "gpu_temp"),
             ("🔥 GPU Hotspot Sıcaklığı", "gpu_hotspot"),
             ("🎮 GPU Kullanımı (%)", "gpu_load"),
+            ("🔌 GPU Güç Tüketimi (W)", "gpu_power"),
             ("🌀 GPU Fan Hızı (%)", "gpu_fan"),
             ("🎮 GPU VRAM Kullanımı (GB)", "gpu_vram_used"),
             ("📊 GPU VRAM Kullanımı (%)", "gpu_vram_load"),
@@ -6775,6 +6859,7 @@ class CyberPulseStudioGUI(QMainWindow):
             ("📊 Kalan / Boş RAM (%)", "ram_free_load"),
             ("💿 Disk Okuma/Yazma (MB/s)", "disk_io"),
             ("⏳ Sistem Açık Kalma Süresi", "system_uptime"),
+            ("🕹️ Aktif Oyun Oturum Süresi", "game_session_time"),
             ("📥 İndirme Hızı (Download)", "net_down"),
             ("📤 Yükleme Hızı (Upload)", "net_up"),
             ("📶 İnternet Ping (ms)", "net_ping"),
@@ -7098,6 +7183,7 @@ class CyberPulseStudioGUI(QMainWindow):
         self.refresh_elements_list()
         if self.theme_data.get('elements') and self.selected_element_idx is None:
             self.select_element_by_index(0)
+        self._update_top_bar_telemetry_text()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -7125,11 +7211,13 @@ class CyberPulseStudioGUI(QMainWindow):
             gpu_l = str(metrics.get('gpu_load', '--%')).strip()
             ram_u = str(metrics.get('ram_used', '-- GB')).strip()
 
-            # Breakpoint 1: Wide window (>= 1360 px) -> Full telemetry + resolution badge + captions
-            # Breakpoint 2: Medium window (1150..1359 px) -> Compact telemetry, hide redundant res badge & captions
-            # Breakpoint 3: Narrow window (< 1150 px) -> Ultra-compact telemetry, hide status pill & brightness % label
-            is_wide = (win_w >= 1360)
-            is_medium = (1150 <= win_w < 1360)
+            # Breakpoint 1: Wide window (>= 1460 px) -> Full telemetry + resolution badge + captions
+            # Breakpoint 2: Medium window (1180..1459 px) -> Compact telemetry, hide redundant res badge & captions
+            # Breakpoint 3: Narrow window (< 1180 px) -> Ultra-compact telemetry, hide status pill & brightness % label
+            is_wide = (win_w >= 1460)
+            is_medium = (1180 <= win_w < 1460)
+            if hasattr(self, 'lbl_center_ws_title') and hasattr(self, 'center_box'):
+                self.lbl_center_ws_title.setVisible(self.center_box.width() >= 530)
 
             if hasattr(self, 'lbl_top_gpu_pill'):
                 if is_wide:
@@ -7435,10 +7523,100 @@ class CyberPulseStudioGUI(QMainWindow):
                 QMessageBox.warning(self, "Kaydetme Hatası", f"Tema düzeni kaydedilirken hata oluştu: {e}")
             return False
 
+    def open_quick_color_palette_dialog(self):
+        """
+        🎨 One-Click Global Theme Color Palette Switcher:
+        Transforms all elements in the active theme into a cohesive color palette in 1 click (with Undo support).
+        """
+        palettes = [
+            ("💠 Siber Mavi (Cyber Cyan)", "#ffffff", "#38bdf8", "#00a6e0", "#0f172a"),
+            ("🔴 ROG Cumhuriyet Kırmızısı (ROG Red)", "#ffe4e6", "#ef4444", "#dc2626", "#18090d"),
+            ("🟢 Matrix Siber Yeşil (Matrix Green)", "#dcfce7", "#10b981", "#22c55e", "#051b11"),
+            ("🟣 Neon Synthwave Mor (Neon Purple)", "#f3e8ff", "#c084fc", "#a855f7", "#160b29"),
+            ("🟡 Cyberpunk Altın / Kehribar (Cyber Gold)", "#fef9c3", "#facc15", "#f59e0b", "#1c1605"),
+            ("❄️ Minimalist Buz Beyazı (Ice White)", "#f8fafc", "#e2e8f0", "#94a3b8", "#0f172a"),
+        ]
+        names = [p[0] for p in palettes]
+        choice, ok = QInputDialog.getItem(
+            self,
+            "🎨 Tema Renk Paleti Değiştirici",
+            "Bu temadaki tüm araçlara uygulanacak uyumlu renk paletini seçin (Ctrl+Z ile geri alınabilir):",
+            names,
+            0,
+            False
+        )
+        if not ok or not choice:
+            return
+        sel = next((p for p in palettes if p[0] == choice), None)
+        if not sel:
+            return
+        _, txt_c, pct_c, gfx_c, bg_c = sel
+        els = self.theme_data.get('elements', [])
+        if not els:
+            return
+        self.push_undo_state(f"Renk Paleti ({choice})")
+        for el in els:
+            if not isinstance(el, dict):
+                continue
+            el['textColor'] = txt_c
+            el['percentColor'] = pct_c
+            el['graphicColor'] = gfx_c
+            el['bgColor'] = bg_c
+        if self.selected_element_idx is not None and 0 <= self.selected_element_idx < len(els):
+            self.load_element_properties(els[self.selected_element_idx])
+        self.save_theme_to_disk()
+        if hasattr(self, 'canvas_widget'):
+            self.canvas_widget.update()
+
+    def copy_selected_element_style(self):
+        """
+        🖌️ Copies the visual style (font, colors, opacity, border, cornerRadius, glow, animation)
+        of the currently selected widget without copying its position or sensor type (Ctrl+Shift+C).
+        """
+        els = self.theme_data.get('elements', [])
+        if self.selected_element_idx is None or not (0 <= self.selected_element_idx < len(els)):
+            return
+        src = els[self.selected_element_idx]
+        style_keys = (
+            'fontFamily', 'fontSize', 'valueFontSize', 'isBold', 'isItalic', 'textAlign',
+            'textColor', 'percentColor', 'graphicColor', 'bgColor', 'bgOpacity',
+            'cornerRadius', 'showBorder', 'glowEnabled', 'dynamicColor',
+            'tLowPct', 'tHighPct', 'tLowColor', 'tMidColor', 'tHighColor',
+            'animEffect', 'animSpeed'
+        )
+        self._copied_element_style = {k: copy.deepcopy(src[k]) for k in style_keys if k in src}
+        if hasattr(self, 'btn_paste_style'):
+            self.btn_paste_style.setText("📋 Yapıştır ✓")
+
+    def paste_style_to_selected_elements(self):
+        """
+        📋 Applies the copied visual style to all currently selected widget(s) (Ctrl+Shift+V).
+        """
+        copied = getattr(self, '_copied_element_style', None)
+        if not copied or not isinstance(copied, dict):
+            QMessageBox.information(self, "Stil Kopyalanmadı", "Önce bir öge seçip '🖌 Stil Kopyala' (Ctrl+Shift+C) butonuna basın.")
+            return
+        els = self.theme_data.get('elements', [])
+        targets = sorted(i for i in self.selected_element_indices if 0 <= i < len(els))
+        if not targets and self.selected_element_idx is not None and 0 <= self.selected_element_idx < len(els):
+            targets = [self.selected_element_idx]
+        if not targets:
+            return
+        self.push_undo_state("Stil Yapıştır")
+        for idx in targets:
+            el = els[idx]
+            for k, v in copied.items():
+                el[k] = copy.deepcopy(v)
+        if self.selected_element_idx is not None and 0 <= self.selected_element_idx < len(els):
+            self.load_element_properties(els[self.selected_element_idx])
+        self.save_theme_to_disk()
+        if hasattr(self, 'canvas_widget'):
+            self.canvas_widget.update()
+
     def apply_full_layout_to_all_themes(self):
         """
-        🔄 Applies the current screen's elements and layout ONLY to saved preset themes that have
-        the exact same resolution (width × height) as the currently active screen workspace.
+        🔄 Opens a Multi-Select Checklist Dialog allowing the user to apply the current screen's
+        elements and layout either to ALL or ONLY SELECTED saved preset themes of the same resolution.
         """
         try:
             curr_w = max(64, int(self.theme_data.get('width', 320)))
@@ -7454,22 +7632,78 @@ class CyberPulseStudioGUI(QMainWindow):
                     self,
                     "Bu Çözünürlükte Kayıtlı Tema Yok",
                     f"Arşivinizde şu an aktif ekran çözünürlüğünüz olan {curr_w}×{curr_h} boyutunda kayıtlı bir şablon tema bulunamadı.\n\n"
-                    f"Önce '💾 Şablona Kaydet' butonuyla {curr_w}×{curr_h} çözünürlüğünde tema kaydedebilirsiniz."
+                    f"Önce '💾 Şablona Kaydet' veya '📌 Bu Temaya Kaydet' butonuyla {curr_w}×{curr_h} çözünürlüğünde tema kaydedebilirsiniz."
                 )
                 return
 
-            reply = QMessageBox.question(
-                self,
-                f"🔄 Düzeni {curr_w}×{curr_h} Çözünürlükteki Temalara Uygula",
-                f"Mevcut ekrandaki ({curr_w}×{curr_h}) TÜM ÖĞELER, KONUMLAR ve DÜZEN,\n"
-                f"arşivinizde yalnızca aynı çözünürlüğe ({curr_w}×{curr_h}) sahip {len(matching_themes)} adet kayıtlı temaya aktarılacaktır.\n\n"
-                f"(Farklı çözünürlükteki temalarınız hiçbir şekilde değiştirilmeyecektir.)\n\n"
-                f"Devam etmek istiyor musunuz?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
-            )
+            # Build Multi-Select Checklist Dialog
+            dlg = QDialog(self)
+            dlg.setWindowTitle(f"🔄 Düzeni Seçili Temalara Uygula ({curr_w}×{curr_h})")
+            dlg.setMinimumSize(480, 440)
+            dlg.setStyleSheet("QDialog { background-color: #0b1326; color: #dae2fd; } QLabel { color: #dae2fd; }")
+            d_lay = QVBoxLayout(dlg)
+            d_lay.setContentsMargins(16, 14, 16, 14)
+            d_lay.setSpacing(10)
 
-            if reply != QMessageBox.Yes:
+            lbl_hdr = QLabel(f"📐 {curr_w}×{curr_h} Çözünürlüğündeki Hangi Temalara Bu Düzen Aktarılsın?")
+            lbl_hdr.setStyleSheet("font-size: 13px; font-weight: 900; color: #7bd0ff;")
+            d_lay.addWidget(lbl_hdr)
+
+            lbl_sub = QLabel("İstediğiniz temaları işaretleyin (İşaretsiz bıraktığınız temaların kendi özel düzenleri korunur):")
+            lbl_sub.setWordWrap(True)
+            lbl_sub.setStyleSheet("font-size: 11px; color: #908fa0;")
+            d_lay.addWidget(lbl_sub)
+
+            sel_bar = QHBoxLayout()
+            btn_all = QPushButton("☑ Tümünü Seç")
+            btn_all.setStyleSheet("background: #171f33; color: #4edea3; border: 1px solid #222a3d; border-radius: 5px; padding: 4px 10px; font-size: 11px; font-weight: 800;")
+            btn_none = QPushButton("☐ Seçimi Temizle")
+            btn_none.setStyleSheet("background: #171f33; color: #c4c5d9; border: 1px solid #222a3d; border-radius: 5px; padding: 4px 10px; font-size: 11px; font-weight: 800;")
+            sel_bar.addWidget(btn_all)
+            sel_bar.addWidget(btn_none)
+            sel_bar.addStretch()
+            d_lay.addLayout(sel_bar)
+
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setStyleSheet("QScrollArea { background: #060e20; border: 1px solid #1e293b; border-radius: 8px; }")
+            sc_w = QWidget()
+            sc_w.setStyleSheet("background: #060e20;")
+            sc_v = QVBoxLayout(sc_w)
+            sc_v.setContentsMargins(10, 8, 10, 8)
+            sc_v.setSpacing(6)
+
+            chk_pairs = []
+            for t_item in matching_themes:
+                chk = QCheckBox(f"📦 {t_item['name']}  ({curr_w}×{curr_h})")
+                chk.setChecked(True)
+                chk.setStyleSheet("color: #dae2fd; font-size: 12px; font-weight: 700; padding: 4px;")
+                sc_v.addWidget(chk)
+                chk_pairs.append((chk, t_item))
+            sc_v.addStretch()
+            scroll.setWidget(sc_w)
+            d_lay.addWidget(scroll, stretch=1)
+
+            btn_all.clicked.connect(lambda: [c.setChecked(True) for c, _ in chk_pairs])
+            btn_none.clicked.connect(lambda: [c.setChecked(False) for c, _ in chk_pairs])
+
+            ftr = QHBoxLayout()
+            ftr.addStretch()
+            btn_ok = QPushButton("✅ Seçili Temalara Düzeni Aktar")
+            btn_ok.setStyleSheet("background: #00885d; color: white; font-weight: 900; padding: 7px 16px; border-radius: 6px; font-size: 12px;")
+            btn_ok.clicked.connect(dlg.accept)
+            btn_cancel = QPushButton("İptal")
+            btn_cancel.setStyleSheet("background: #171f33; color: #c4c5d9; font-weight: 700; padding: 7px 14px; border-radius: 6px; font-size: 12px;")
+            btn_cancel.clicked.connect(dlg.reject)
+            ftr.addWidget(btn_ok)
+            ftr.addWidget(btn_cancel)
+            d_lay.addLayout(ftr)
+
+            if dlg.exec_() != QDialog.Accepted:
+                return
+
+            matching_themes = [t_it for c, t_it in chk_pairs if c.isChecked()]
+            if not matching_themes:
                 return
 
             self.save_theme_to_disk()
@@ -9429,6 +9663,34 @@ class CyberPulseStudioGUI(QMainWindow):
                         self.rotate_screen_workspace_theme(sid, delta=1)
             except Exception as e:
                 print("Auto rotate note:", e)
+
+        # 🔔 Throttled Thermal / Low-FPS Sound & Tray Alert Notification (once per 30s max)
+        if self.app_settings.get('thermal_sound_alert', False):
+            try:
+                now_al = time.time()
+                if now_al - getattr(self, '_last_sound_alert_ts', 0.0) >= 30.0:
+                    m_snap = getattr(self.sensor, 'cached_sensors', {}) or {}
+                    t_lim = int(self.theme_data.get('thermal_alert_limit', 82) or 82)
+                    c_t = int(''.join(filter(str.isdigit, str(m_snap.get('cpu_temp', '50')))) or '50')
+                    g_t = int(''.join(filter(str.isdigit, str(m_snap.get('gpu_temp', '45')))) or '45')
+                    f_lim = int(self.app_settings.get('low_fps_alert_limit', 0) or 0)
+                    f_cur = int(''.join(filter(str.isdigit, str(m_snap.get('game_fps', '0')))) or '0')
+                    alert_msg = ""
+                    if (t_lim <= c_t <= 105) or (t_lim <= g_t <= 105):
+                        alert_msg = f"Kritik Sıcaklık! CPU: {c_t}°C | GPU: {g_t}°C (Eşik: {t_lim}°C)"
+                    elif f_lim > 0 and 0 < f_cur < f_lim:
+                        alert_msg = f"Düşük FPS Algılandı: {f_cur} FPS (Eşik: {f_lim} FPS)"
+                    if alert_msg:
+                        self._last_sound_alert_ts = now_al
+                        try:
+                            import winsound
+                            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+                        except Exception:
+                            pass
+                        if hasattr(self, 'tray_icon') and self.tray_icon:
+                            self.tray_icon.showMessage("🔔 CyberPulse Donanım Uyarısı", alert_msg, QSystemTrayIcon.Warning, 3000)
+            except Exception:
+                pass
 
         # ⚡ CRITICAL OPTIMIZATION: If GUI is hidden, minimized, or preview not visible, SKIP canvas rendering completely!
         if not self.isVisible() or self.isMinimized() or not self.canvas_widget.isVisible():

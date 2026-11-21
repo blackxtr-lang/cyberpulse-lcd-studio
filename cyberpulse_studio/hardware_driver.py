@@ -1360,12 +1360,32 @@ class HardwareDriver:
                     elif s_id == 'disk_io':
                         vector_icon_name = 'disk'
                         display_metric = val if 'MB/s' in val else f"{val} MB/s"
-                    elif s_id == 'system_uptime':
+                    elif s_id in ('system_uptime', 'game_session_time'):
                         vector_icon_name = 'uptime'
                         display_metric = val
-                    elif s_id == 'game_fps':
+                    elif s_id in ('gpu_power', 'cpu_power'):
+                        vector_icon_name = 'gpu' if s_id == 'gpu_power' else 'cpu'
+                        display_metric = val if 'W' in val else f"{val} W"
+                        try:
+                            w_num = float(''.join(c for c in display_metric if c.isdigit() or c == '.') or '0')
+                            max_w = 350.0 if s_id == 'gpu_power' else 180.0
+                            bar_pct_override = max(0, min(100, int(round((w_num / max_w) * 100.0))))
+                        except Exception:
+                            bar_pct_override = 30
+                    elif s_id in ('mobo_temp', 'aio_temp'):
+                        vector_icon_name = 'temp'
+                        display_metric = val if '°C' in val else f"{val}°C"
+                    elif s_id in ('game_fps', 'game_fps_1low'):
                         vector_icon_name = 'fps'
                         display_metric = val if 'FPS' in val else f"{val} FPS"
+                    elif s_id == 'game_frametime':
+                        vector_icon_name = 'fps'
+                        display_metric = val if 'ms' in val else f"{val} ms"
+                        try:
+                            ms_num = float(''.join(c for c in display_metric if c.isdigit() or c == '.') or '0')
+                            bar_pct_override = max(0, min(100, int(round((ms_num / 33.3) * 100.0))))
+                        except Exception:
+                            bar_pct_override = 20
                     elif s_id in ['time_digital', 'date_full', 'date_day_tr']:
                         display_metric = val
                     else:
@@ -1836,6 +1856,18 @@ class HardwareDriver:
                         alert_font = get_custom_font('Impact', 32, is_bold=True)
                         draw_a.text((w // 2 - 100, h // 2 - 20), "🔥 HIGH TEMP ALERT!", fill=(255, 255, 255, 255), font=alert_font)
                         img = Image.alpha_composite(img.convert('RGBA'), alert_ov).convert('RGB')
+                else:
+                    low_fps_limit = safe_int(theme_data.get('low_fps_alert_limit'), 0)
+                    if low_fps_limit > 0:
+                        fps_raw = str(sensor_metrics.get('game_fps', '0'))
+                        fps_n = int(''.join(filter(str.isdigit, fps_raw)) or '0')
+                        if 0 < fps_n < low_fps_limit and self.flash_cycle < 10:
+                            fps_ov = Image.new('RGBA', (w, h), (245, 158, 11, 55))
+                            draw_f = ImageDraw.Draw(fps_ov)
+                            draw_f.rectangle([8, 8, w - 8, h - 8], outline=(245, 158, 11, 240), width=6)
+                            f_font = get_custom_font('Impact', 26, is_bold=True)
+                            draw_f.text((max(12, w // 2 - 110), max(12, h // 2 - 18)), f"📉 LOW FPS ({fps_n} FPS)", fill=(254, 240, 138, 255), font=f_font)
+                            img = Image.alpha_composite(img.convert('RGBA'), fps_ov).convert('RGB')
             except Exception:
                 pass
 

@@ -417,6 +417,22 @@ TR_TO_EN_EXACT = {
     "Mevcut düzeni yalnızca bu temaya kaydet (Ctrl+S)": "Save current layout only to this active theme (Ctrl+S)",
     "Mevcut ekrandaki ögeleri ve yerleşim düzenini YALNIZCA şu an açık olan aktif temaya kaydeder (Diğer temaların düzenini değiştirmez - Ctrl+S)":
         "Saves the current elements and layout ONLY to the currently active theme (Does not overwrite other themes - Ctrl+S)",
+    "🎯 1% Low FPS Göstergesi": "🎯 1% Low FPS Counter",
+    "📉 Frametime (ms) Gecikmesi": "📉 Frametime (ms) Latency",
+    "🔌 CPU Paket Gücü (W)": "🔌 CPU Package Power (W)",
+    "💧 Sıvı Soğutma (AIO) Sıcaklığı": "💧 Liquid Cooler (AIO) Temp",
+    "🛡️ Anakart / VRM Sıcaklığı": "🛡️ Motherboard / VRM Temp",
+    "🔌 GPU Güç Tüketimi (W)": "🔌 GPU Power Draw (W)",
+    "🕹️ Aktif Oyun Oturum Süresi": "🕹️ Active Game Session Time",
+    "🎨 Tema Renk Paleti": "🎨 Color Palette",
+    "🖌 Stil Kopyala": "🖌 Copy Style",
+    "📋 Yapıştır": "📋 Paste",
+    "📋 Yapıştır ✓": "📋 Paste ✓",
+    "📉 Oyun İçi Düşük FPS Uyarı Eşiği (0=Kapalı):": "📉 In-Game Low FPS Alert Limit (0=Off):",
+    "🔔 Kritik Sıcaklık / Düşük FPS Uyarısında Sesli Bip & Bildirim Göster":
+        "🔔 Play Audio Beep & Notification on Critical Temp / Low FPS Alert",
+    "☑ Tümünü Seç": "☑ Select All",
+    "✅ Seçili Temalara Düzeni Aktar": "✅ Apply Layout to Selected Themes",
 }
 
 # Dynamic regex patterns (Turkish -> English)
