@@ -3,8 +3,11 @@ name: Build Windows EXE & Publish Release
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*' ]
   workflow_dispatch:
+
+concurrency:
+  group: cyberpulse-windows-release
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -15,6 +18,16 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Read Version from version.json
+        id: get_version
+        shell: pwsh
+        run: |
+          $vjson = Get-Content "cyberpulse_studio/version.json" -Raw | ConvertFrom-Json
+          $ver = $vjson.version
+          Write-Host "Detected Version: v$ver"
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "tag=v$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -52,6 +65,7 @@ jobs:
           Copy-Item "cyberpulse_studio/cyberpulse.ico" "dist/CyberPulse_Studio/" -Force
           Copy-Item "cyberpulse_studio/checkmark.png" "dist/CyberPulse_Studio/" -Force
           Copy-Item "cyberpulse_studio/radio_checked.png" "dist/CyberPulse_Studio/" -Force
+          Copy-Item "cyberpulse_studio/version.json" "dist/CyberPulse_Studio/" -Force
           Compress-Archive -Path "dist/CyberPulse_Studio/*" -DestinationPath "CyberPulse_Studio_Windows_x64.zip" -Force
 
       - name: Upload Artifact
@@ -63,15 +77,17 @@ jobs:
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.3.0
-          name: "⚡ CyberPulse LCD Studio v1.3.0 — Windows Portable (.exe)"
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: "⚡ CyberPulse LCD Studio ${{ steps.get_version.outputs.tag }} — Windows Portable (.exe)"
           body: |
-            ## 🇹🇷 Türkçe — Kurulumsuz Taşınabilir Windows Sürümü (.exe) — v1.3.0
-            ### ✨ Yenilikler (v1.3.0)
-            - **☕ Bana Bir Kahve Ismarla:** Sol menüye ve GitHub sayfasına doğrudan destek butonu eklendi.
-            - **📐 Tuvale Göre Otomatik Pencere Boyutlandırma & Esnek Paneller:** Seçilen ekran çözünürlüğüne (`320×1480` dikey şerit veya `1920×1080` yatay ekran) göre pencere otomatik boyutlanır; elle büyütüp küçültüldüğünde tuval ve yan paneller yazıları kesmeden orantılı ölçeklenir.
-            - **💾 Özelleştirilebilir RAM Gösterim Modları:** `Kullanılan GB`, `Kullanılan %`, `Kullanılan GB + %`, `Kalan/Boş GB`, `Kalan %`, `Kalan GB + %` seçenekleri eklendi; metin değeri ile altındaki ilerleme çubuğu her zaman birebir aynı oranı gösterir.
-            - **🔄 Otomatik Güncelleme Denetleyicisi:** Uygulama her açılışta GitHub üzerinden yeni sürümü denetler ve otomatik günceller.
+            ## 🇹🇷 Türkçe — Kurulumsuz Taşınabilir Windows Sürümü (.exe) — ${{ steps.get_version.outputs.tag }}
+            ### ✨ Yenilikler (${{ steps.get_version.outputs.tag }})
+            - **🎮 14+ Oyun Başlatıcısı (Launcher) Otomatik Tarama:** Steam, Epic Games, Xbox / PC Game Pass (`.GamingRoot`), Riot Games, EA App, Ubisoft Connect, Battle.net, GOG Galaxy, Rockstar Games, Amazon Games, Heroic, itch.io, HoYoPlay, Wargaming ve özel oyun klasörlerini otomatik tarar.
+            - **📌 Her Tema İçin Ayrı Düzen Kaydetme & ☑️ Seçmeli Düzen Aktarımı:** `📌 Bu Temaya Kaydet (Ctrl+S)` ile düzeni yalnızca aktif temaya kaydedin veya `🔄 Tümüne Uygula` penceresinden seçtiğiniz temalara aktarın.
+            - **🎛️ Canlı Ses / Müzik Ekolayzırı (WASAPI Audio Visualizer):** 24-bant Dikey LED Barlar (Bars) ve Akıcı Ses Dalgası (Wave).
+            - **⚡ Yeni Donanım & Oyun Sensörleri:** GPU VRAM (6 gösterim modu), GPU Hotspot, GPU/CPU Güç Tüketimi (`W`), Sıvı Soğutma (AIO) & Anakart sıcaklığı, `1% Low FPS`, `Frametime (ms)` ve `Oyun Oturum Süresi` sayacı.
+            - **🎨 Tek Tıkla Tema Renk Paletleri, 🖌️ Stil Kopyala/Yapıştır, 🔗 Katman Gruplama (`Ctrl+G`) & 🎬 GIF/MP4 Çıktı:** Aktif temayı tek tıkla 6 hazır renk paletine dönüştürün, araç stillerini kopyalayın ve hareketli GIF/MP4 olarak dışa aktarın.
+            - **☀️ Parlaklık Kontrolü & 🌙 Windows Kilidi (`Win+L`) IPS Koruması:** Üst bardan ekran parlaklığını ayarlayın; bilgisayar kilitlendiğinde kasa ekranı otomatik uyku moduna geçer.
 
             ### 📥 Kurulumsuz Kullanım
             1. Aşağıdaki **`CyberPulse_Studio_Windows_x64.zip`** dosyasını indirin ve bir klasöre çıkartın.
@@ -80,12 +96,14 @@ jobs:
 
             ---
 
-            ## 🇬🇧 English — Portable Windows Release (.exe) — v1.3.0
-            ### ✨ What's New (v1.3.0)
-            - **☕ Buy Me a Coffee Button:** Added direct GitHub Sponsors support button in the left navigation rail and README.
-            - **📐 Adaptive Window Sizing & Unclipped Responsive Panels:** Window automatically adapts to the selected canvas resolution (`320×1480` portrait strip or `1920×1080` landscape) and scales proportionally without clipping any labels or controls.
-            - **💾 Customizable RAM Display Modes:** Choose between `Used GB`, `Used %`, `Used GB + %`, `Free GB`, `Free %`, and `Free GB + %` with 100% synchronized progress bars.
-            - **🔄 Automatic Startup Updater:** Checks GitHub on startup and installs updates automatically.
+            ## 🇬🇧 English — Portable Windows Release (.exe) — ${{ steps.get_version.outputs.tag }}
+            ### ✨ What's New (${{ steps.get_version.outputs.tag }})
+            - **🎮 14+ Game Launcher Auto-Discovery:** Automatically scans Steam, Epic Games, Xbox / PC Game Pass (`.GamingRoot`), Riot Games, EA App, Ubisoft Connect, Battle.net, GOG Galaxy, Rockstar Games, Amazon Games, Heroic, itch.io, HoYoPlay, Wargaming, and custom folders.
+            - **📌 Per-Theme Layout Saving & ☑️ Selective Multi-Theme Sync:** Save layout changes only to the active theme (`Ctrl+S`) or selectively sync across checked themes of the same resolution.
+            - **🎛️ Live WASAPI Audio Visualizer:** Real-time 24-band Vertical LED Bars and Smooth Neon Waveform widgets.
+            - **⚡ New Hardware & Gaming Telemetry:** GPU VRAM (6 display modes), GPU Hotspot, GPU/CPU Power Draw (`W`), Liquid Cooler (AIO) & Motherboard Temp, `1% Low FPS`, `Frametime (ms)`, and `Game Session Timer`.
+            - **🎨 1-Click Color Palettes, 🖌️ Style Copy/Paste, 🔗 Layer Grouping (`Ctrl+G`) & 🎬 GIF/MP4 Export.**
+            - **☀️ Brightness Slider & 🌙 Windows Lock (`Win+L`) Auto-Standby.**
 
             ### 📥 Quick Start
             1. Download **`CyberPulse_Studio_Windows_x64.zip`** below and extract it to any folder.
