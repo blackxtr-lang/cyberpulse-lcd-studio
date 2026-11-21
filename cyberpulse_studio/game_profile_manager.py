@@ -2,6 +2,8 @@ import os
 import re
 import json
 import ctypes
+import sqlite3
+import xml.etree.ElementTree as ET
 import psutil
 
 from PyQt5.QtCore import Qt, pyqtSignal
@@ -16,8 +18,8 @@ from hardware_driver import _is_safe_local_file_path
 
 # 🔒 SECURITY: Limits for manifest & directory scanning
 MAX_MANIFEST_READ_BYTES = 512 * 1024  # 512 KB max per manifest file
-MAX_SCAN_DIRS = 300                   # Cap number of game folders scanned
-MAX_FILES_PER_GAME_DIR = 80           # Cap files inspected per game folder
+MAX_SCAN_DIRS = 500                   # Cap number of game folders scanned
+MAX_FILES_PER_GAME_DIR = 120          # Cap files inspected per game folder
 
 # Known non-game helper / installer / crash-reporter executables to ignore when picking a game's main .exe
 NON_GAME_EXE_KEYWORDS = (
@@ -26,8 +28,28 @@ NON_GAME_EXE_KEYWORDS = (
     'unitycrashhandler', 'unrealcefsubprocess', 'cefprocess', 'crs-handler',
     'dotnet', 'directx', 'physx', 'cleanup', 'touchup', 'activation', 'updater',
     'update', 'patcher', 'repair', 'benchmark', 'config', 'settings', 'server',
-    'dedicated', 'modtools', 'editor', 'sdk', 'compiler', 'steamerrorreporter'
+    'dedicated', 'modtools', 'editor', 'sdk', 'compiler', 'steamerrorreporter',
+    'socialclubhelper', 'rockstarservice', 'rockstarsteamhelper', 'eaanticheat',
+    'link2ea', 'activationui', 'uplaywebcore', 'ubisoftgamelauncher', 'riotclient',
+    'gamelaunchhelper', 'zfgamebrowser', 'qtwebengineprocess', 'webhelper',
+    'bugreport', 'errorreporter', 'prerequisite', 'notification_helper',
+    'battle.net', 'bnetlauncher', 'epicgameslauncher', 'eadesktop', 'eabackgroundservice',
+    'galaxyclient', 'goggalaxy', 'steamservice', 'steamwebhelper'
 )
+
+# Priority subdirectories where modern engines (Unreal, REDengine, Frostbite, Source 2, Unity) store main binaries
+PRIORITY_ENGINE_SUBDIRS = {
+    'binaries', 'win64', 'x64', 'game', 'bin', 'retail', 'content',
+    'shootergame', 'engine', 'client', 'release', 'win32'
+}
+
+SKIP_SUBDIRS = {
+    'redist', '_commonredist', 'directx', 'vcredist', 'support', 'installers',
+    'easyanticheat', 'battleye', 'mono', 'logs', 'crashes', '__installer',
+    'shader', 'shadercache', 'movies', 'audio', 'sound', 'localization',
+    'locales', 'licenses', 'docs', 'manual', 'bonus', 'ost', 'soundtrack',
+    'mods', 'workshop', 'plugins', 'streamingassets', 'paks', 'cooked'
+}
 
 # Strict regex for valid Windows executable filenames
 VALID_EXE_REGEX = re.compile(r'^[a-zA-Z0-9_\-\.\(\)\s\+]{1,100}\.exe$', re.IGNORECASE)
@@ -45,20 +67,23 @@ def sanitize_exe_name(exe_str):
     return base
 
 
-def _find_best_game_exe_in_folder(folder_path, game_title=""):
+def _find_best_game_exe_in_folder(folder_path, game_title="", max_depth=4):
     """
-    Scans a game installation folder (up to depth 2) to find the primary game .exe.
-    Uses file size and title similarity heuristics while ignoring crash handlers & redistributables.
+    Scans a game installation folder (up to depth 4 for Unreal Engine Binaries/Win64 etc.)
+    to find the primary game .exe. Uses file size and title similarity heuristics while
+    ignoring crash handlers, anti-cheat stubs, & redistributables.
     """
     if not folder_path or not _is_safe_local_file_path(folder_path) or not os.path.isdir(folder_path):
         return None, None
 
     candidates = []
     title_tokens = [t.lower() for t in re.split(r'[^a-zA-Z0-9]+', game_title or '') if len(t) >= 3]
+    acronym = "".join([w[0].lower() for w in re.split(r'[^a-zA-Z0-9]+', game_title or '') if w])
     folder_abs = os.path.abspath(folder_path)
+    inspected_files = [0]
 
     def _scan_dir(cur_dir, depth):
-        if depth > 2 or len(candidates) >= MAX_FILES_PER_GAME_DIR:
+        if depth > max_depth or inspected_files[0] >= MAX_FILES_PER_GAME_DIR:
             return
         try:
             entries = os.scandir(cur_dir)
@@ -66,9 +91,10 @@ def _find_best_game_exe_in_folder(folder_path, game_title=""):
             return
         with entries:
             count = 0
+            subdirs_to_visit = []
             for entry in entries:
                 count += 1
-                if count > MAX_FILES_PER_GAME_DIR:
+                if count > MAX_FILES_PER_GAME_DIR or inspected_files[0] >= MAX_FILES_PER_GAME_DIR:
                     break
                 try:
                     if entry.is_symlink():
@@ -78,6 +104,7 @@ def _find_best_game_exe_in_folder(folder_path, game_title=""):
                     if getattr(st, 'st_file_attributes', 0) & 0x400:
                         continue
                     if entry.is_file(follow_symlinks=False) and entry.name.lower().endswith('.exe'):
+                        inspected_files[0] += 1
                         ename_lower = entry.name.lower()
                         if any(kw in ename_lower for kw in NON_GAME_EXE_KEYWORDS):
                             continue
@@ -87,24 +114,36 @@ def _find_best_game_exe_in_folder(folder_path, game_title=""):
                         if sz < 100 * 1024:  # Ignore tiny stub exes < 100 KB
                             continue
                         # Score candidate by size + name match + shipping binary bonus
-                        score = min(sz / (1024.0 * 1024.0), 150.0)
+                        score = min(sz / (1024.0 * 1024.0), 160.0)
                         stem = os.path.splitext(ename_lower)[0]
                         if 'launcher' in ename_lower:
-                            score -= 120.0
+                            score -= 130.0
                         if 'shipping' in ename_lower:
-                            score += 80.0
+                            score += 95.0
+                        if 'win64' in ename_lower or 'x64' in ename_lower:
+                            score += 25.0
                         for tok in title_tokens:
                             if tok in stem:
                                 score += 45.0
+                        if len(acronym) >= 3 and (stem == acronym or stem.startswith(acronym)):
+                            score += 40.0
                         if depth == 0:
-                            score += 20.0
+                            score += 18.0
                         candidates.append((score, entry.name, os.path.abspath(entry.path)))
-                    elif entry.is_dir(follow_symlinks=False) and depth < 2:
+                    elif entry.is_dir(follow_symlinks=False) and depth < max_depth:
                         dname = entry.name.lower()
-                        if dname not in ('redist', '_commonredist', 'directx', 'vcredist', 'support', 'installers', 'easyanticheat', 'battleye', 'mono', 'logs', 'crashes'):
-                            _scan_dir(entry.path, depth + 1)
+                        if dname in SKIP_SUBDIRS or dname.startswith('.'):
+                            continue
+                        # Prioritize engine binary directories even at deeper levels
+                        is_prio = (dname in PRIORITY_ENGINE_SUBDIRS) or any(tok in dname for tok in title_tokens)
+                        if depth < 2 or is_prio:
+                            subdirs_to_visit.append((0 if is_prio else 1, entry.path))
                 except Exception:
                     pass
+
+            subdirs_to_visit.sort(key=lambda x: x[0])
+            for _, s_path in subdirs_to_visit[:25]:
+                _scan_dir(s_path, depth + 1)
 
     _scan_dir(folder_abs, 0)
     if not candidates:
@@ -191,7 +230,11 @@ def _scan_steam_games():
                     continue
                 g_name = name_m.group(1).strip()
                 install_sub = os.path.basename(dir_m.group(1).strip())
-                if any(skip in g_name.lower() for skip in ("steamworks common redistributables", "proton", "steam linux runtime", "soundtrack", "dedicated server")):
+                if any(skip in g_name.lower() for skip in (
+                    "steamworks common redistributables", "proton", "steam linux runtime",
+                    "soundtrack", "dedicated server", "wallpaper engine", "driver booster",
+                    "lossless scaling", "soundpad", "borderless gaming", "crosshair x"
+                )):
                     continue
                 common_dir = os.path.abspath(os.path.join(steamapps, "common"))
                 game_dir = os.path.abspath(os.path.join(common_dir, install_sub))
@@ -264,42 +307,853 @@ def _scan_epic_games():
     return games
 
 
-def _scan_standalone_and_registry_games():
-    """Scans common game directories on local drives (Riot Games, XboxGames, Ubisoft, EA, Games) and Uninstall Registry."""
-    games = []
-    candidate_folders = []
-
+def _get_local_drive_roots():
+    """Returns a list of valid local drive mountpoints (e.g. ['C:\\', 'D:\\', 'L:\\'])."""
+    roots = []
     try:
         for part in psutil.disk_partitions(all=False):
             mp = part.mountpoint
-            if not mp or not os.path.isdir(mp):
+            if mp and os.path.isdir(mp):
+                roots.append(mp)
+    except Exception:
+        pass
+    for drv in ("C:\\", "D:\\", "E:\\", "F:\\", "G:\\", "H:\\", "L:\\"):
+        if drv not in roots and os.path.isdir(drv):
+            roots.append(drv)
+    return roots
+
+
+def _scan_xbox_gamepass_games():
+    """
+    Scans Xbox / PC Game Pass / Microsoft Store games:
+    - Reads .GamingRoot on every drive to locate custom Xbox library folders
+    - Inspects XboxGames, WindowsApps (accessible game subfolders), and ModifiableWindowsApps
+    - Parses MicrosoftGame.Config and AppxManifest.xml for exact game titles and primary executables
+    """
+    games = []
+    xbox_roots = set()
+    for mp in _get_local_drive_roots():
+        for default_sub in ("XboxGames", "PC Game Pass", r"Games\XboxGames", r"Program Files\ModifiableWindowsApps"):
+            cand = os.path.join(mp, default_sub)
+            if os.path.isdir(cand) and _is_safe_local_file_path(cand):
+                xbox_roots.add(os.path.normpath(cand))
+        # Parse .GamingRoot binary pointer file (UTF-16LE path after 8-byte RGBX header)
+        groot_file = os.path.join(mp, ".GamingRoot")
+        if os.path.isfile(groot_file) and _is_safe_local_file_path(groot_file):
+            try:
+                with open(groot_file, "rb") as f:
+                    raw = f.read(1024)
+                if len(raw) > 8:
+                    rel_path = raw[8:].decode("utf-16-le", errors="ignore").strip("\x00").strip("\\/")
+                    if rel_path:
+                        custom_xbox_dir = os.path.normpath(os.path.join(mp, rel_path))
+                        if _is_safe_local_file_path(custom_xbox_dir) and os.path.isdir(custom_xbox_dir):
+                            xbox_roots.add(custom_xbox_dir)
+            except Exception:
+                pass
+
+    seen_dirs = set()
+    for xroot in sorted(xbox_roots):
+        try:
+            subdirs = os.listdir(xroot)[:100]
+        except Exception:
+            continue
+        for sub in subdirs:
+            game_dir = os.path.abspath(os.path.join(xroot, sub))
+            if not os.path.isdir(game_dir) or game_dir.lower() in seen_dirs:
                 continue
-            for root_name, platform_label in [
-                ("XboxGames", "Xbox / PC Game Pass"),
-                ("Riot Games", "Riot Games"),
-                ("Games", "Yerel Oyun"),
-                ("GOG Games", "GOG"),
-                (r"Program Files\Epic Games", "Epic Games"),
-                (r"Program Files\EA Games", "EA App"),
-                (r"Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games", "Ubisoft"),
-                (r"Program Files (x86)\Battle.net\Games", "Battle.net"),
-            ]:
-                parent_dir = os.path.join(mp, root_name)
-                if os.path.isdir(parent_dir) and _is_safe_local_file_path(parent_dir):
-                    try:
-                        for sub in os.listdir(parent_dir)[:60]:
-                            if sub.lower() in ('riot client', 'directx', 'redist'):
-                                continue
-                            sub_p = os.path.join(parent_dir, sub)
-                            if os.path.isdir(sub_p):
-                                candidate_folders.append((sub, sub_p, platform_label))
-                    except Exception:
-                        pass
+            seen_dirs.add(game_dir.lower())
+            content_dir = os.path.join(game_dir, "Content")
+            scan_base = content_dir if os.path.isdir(content_dir) else game_dir
+
+            disp_name = sub
+            exe_name = ""
+            exe_path = ""
+
+            # Check MicrosoftGame.Config
+            mgc_path = os.path.join(scan_base, "MicrosoftGame.Config")
+            if not os.path.isfile(mgc_path):
+                mgc_path = os.path.join(game_dir, "MicrosoftGame.Config")
+            if os.path.isfile(mgc_path) and _is_safe_local_file_path(mgc_path):
+                try:
+                    with open(mgc_path, "r", encoding="utf-8", errors="ignore") as f:
+                        xml_txt = f.read(MAX_MANIFEST_READ_BYTES)
+                    root = ET.fromstring(xml_txt)
+                    sv = root.find(".//ShellVisuals")
+                    if sv is not None and sv.attrib.get("DefaultDisplayName"):
+                        disp_name = sv.attrib.get("DefaultDisplayName").strip()
+                    for ex_node in root.findall(".//Executable"):
+                        raw_ex = ex_node.attrib.get("Name", "").strip()
+                        clean_ex = sanitize_exe_name(raw_ex)
+                        if clean_ex and not any(k in clean_ex for k in NON_GAME_EXE_KEYWORDS):
+                            cand_p = os.path.abspath(os.path.join(scan_base, raw_ex))
+                            if _is_safe_local_file_path(cand_p) and os.path.commonpath([game_dir, cand_p]) == game_dir and os.path.isfile(cand_p):
+                                exe_name = clean_ex
+                                exe_path = cand_p
+                                break
+                except Exception:
+                    pass
+
+            if not exe_name:
+                exe_name, exe_path = _find_best_game_exe_in_folder(scan_base, disp_name)
+            if exe_name:
+                games.append({
+                    'game_name': disp_name[:80],
+                    'exe_name': exe_name,
+                    'exe_path': exe_path or "",
+                    'platform': 'Xbox / PC Game Pass'
+                })
+    return games
+
+
+def _scan_riot_games():
+    """
+    Scans Riot Games installations:
+    - C:\\ProgramData\\Riot Games\\Metadata\\*\\*.product_settings.yaml
+    - C:\\ProgramData\\Riot Games\\RiotClientInstalls.json
+    - Riot Games folders across all drives (VALORANT, League of Legends, Legends of Runeterra, 2XKO)
+    """
+    games = []
+    riot_product_dirs = []
+    meta_root = r"C:\ProgramData\Riot Games\Metadata"
+    if os.path.isdir(meta_root):
+        try:
+            for prod_folder in os.listdir(meta_root):
+                p_dir = os.path.join(meta_root, prod_folder)
+                if not os.path.isdir(p_dir):
+                    continue
+                for fn in os.listdir(p_dir):
+                    if fn.endswith(".product_settings.yaml"):
+                        ypath = os.path.join(p_dir, fn)
+                        if _is_safe_local_file_path(ypath) and os.path.isfile(ypath):
+                            try:
+                                with open(ypath, "r", encoding="utf-8", errors="ignore") as f:
+                                    ycontent = f.read(65536)
+                                m = re.search(r'product_install_full_path:\s*"?([^"\r\n]+)"?', ycontent)
+                                if m:
+                                    inst_p = os.path.normpath(m.group(1).strip())
+                                    if _is_safe_local_file_path(inst_p) and os.path.isdir(inst_p):
+                                        riot_product_dirs.append(inst_p)
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+
+    for mp in _get_local_drive_roots():
+        rg_root = os.path.join(mp, "Riot Games")
+        if os.path.isdir(rg_root) and _is_safe_local_file_path(rg_root):
+            try:
+                for sub in os.listdir(rg_root):
+                    if sub.lower() == "riot client":
+                        continue
+                    sub_p = os.path.join(rg_root, sub)
+                    if os.path.isdir(sub_p):
+                        riot_product_dirs.append(sub_p)
+            except Exception:
+                pass
+
+    seen_dirs = set()
+    for pdir in riot_product_dirs:
+        p_abs = os.path.abspath(pdir)
+        if p_abs.lower() in seen_dirs or not os.path.isdir(p_abs):
+            continue
+        seen_dirs.add(p_abs.lower())
+        base_name = os.path.basename(p_abs)
+        low_path = p_abs.lower()
+
+        # Known Riot game direct binary layouts
+        if "valorant" in low_path:
+            title = "VALORANT"
+            ship_p = os.path.join(p_abs, "ShooterGame", "Binaries", "Win64", "VALORANT-Win64-Shipping.exe")
+            if not os.path.isfile(ship_p):
+                ship_p = os.path.join(p_abs, "live", "ShooterGame", "Binaries", "Win64", "VALORANT-Win64-Shipping.exe")
+            if os.path.isfile(ship_p):
+                games.append({'game_name': title, 'exe_name': 'valorant-win64-shipping.exe', 'exe_path': ship_p, 'platform': 'Riot Games'})
+                continue
+        elif "league of legends" in low_path:
+            title = "League of Legends"
+            lol_p = os.path.join(p_abs, "Game", "League of Legends.exe")
+            if os.path.isfile(lol_p):
+                games.append({'game_name': title, 'exe_name': 'league of legends.exe', 'exe_path': lol_p, 'platform': 'Riot Games'})
+                continue
+        elif "lor" in low_path or "bacon" in low_path or "runeterra" in low_path:
+            title = "Legends of Runeterra"
+        else:
+            title = "VALORANT" if base_name.lower() == "live" and "valorant" in low_path else base_name
+
+        exe_name, exe_path = _find_best_game_exe_in_folder(p_abs, title)
+        if exe_name:
+            games.append({
+                'game_name': title[:80],
+                'exe_name': exe_name,
+                'exe_path': exe_path or "",
+                'platform': 'Riot Games'
+            })
+    return games
+
+
+def _scan_ubisoft_games():
+    """
+    Scans Ubisoft Connect / Uplay games via Windows Registry (SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs)
+    and %LOCALAPPDATA%\\Ubisoft Game Launcher\\settings.yml + game directories across drives.
+    """
+    games = []
+    install_dirs = []
+    try:
+        import winreg
+        for hive, subkey in [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Ubisoft\Launcher\Installs"),
+        ]:
+            try:
+                with winreg.OpenKey(hive, subkey) as k:
+                    i = 0
+                    while i < 200:
+                        try:
+                            app_id = winreg.EnumKey(k, i)
+                            i += 1
+                            with winreg.OpenKey(k, app_id) as sk:
+                                inst_dir, _ = winreg.QueryValueEx(sk, "InstallDir")
+                                if inst_dir and isinstance(inst_dir, str):
+                                    norm_d = os.path.normpath(inst_dir.strip())
+                                    if _is_safe_local_file_path(norm_d) and os.path.isdir(norm_d):
+                                        install_dirs.append((os.path.basename(norm_d), norm_d))
+                        except OSError:
+                            break
+            except Exception:
+                pass
     except Exception:
         pass
 
+    # Check Ubisoft settings.yml for custom game_installation_path
+    local_app = os.environ.get("LOCALAPPDATA", "")
+    if local_app:
+        ubi_yml = os.path.join(local_app, "Ubisoft Game Launcher", "settings.yml")
+        if os.path.isfile(ubi_yml) and _is_safe_local_file_path(ubi_yml):
+            try:
+                with open(ubi_yml, "r", encoding="utf-8", errors="ignore") as f:
+                    yml_txt = f.read(65536)
+                m = re.search(r'game_installation_path:\s*"?([^"\r\n]+)"?', yml_txt)
+                if m:
+                    g_root = os.path.normpath(m.group(1).strip())
+                    if _is_safe_local_file_path(g_root) and os.path.isdir(g_root):
+                        for sub in os.listdir(g_root)[:80]:
+                            sp = os.path.join(g_root, sub)
+                            if os.path.isdir(sp):
+                                install_dirs.append((sub, sp))
+            except Exception:
+                pass
+
+    for mp in _get_local_drive_roots():
+        for rel in (
+            r"Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games",
+            r"Program Files\Ubisoft\Ubisoft Game Launcher\games",
+            "Ubisoft Games",
+            r"Games\Ubisoft"
+        ):
+            p = os.path.join(mp, rel)
+            if os.path.isdir(p) and _is_safe_local_file_path(p):
+                try:
+                    for sub in os.listdir(p)[:80]:
+                        sp = os.path.join(p, sub)
+                        if os.path.isdir(sp):
+                            install_dirs.append((sub, sp))
+                except Exception:
+                    pass
+
+    seen = set()
+    for title, folder in install_dirs:
+        f_abs = os.path.abspath(folder)
+        if f_abs.lower() in seen:
+            continue
+        seen.add(f_abs.lower())
+        exe_name, exe_path = _find_best_game_exe_in_folder(f_abs, title)
+        if exe_name:
+            games.append({
+                'game_name': title[:80],
+                'exe_name': exe_name,
+                'exe_path': exe_path or "",
+                'platform': 'Ubisoft'
+            })
+    return games
+
+
+def _scan_ea_origin_games():
+    """
+    Scans EA App / Origin games via Windows Registry (SOFTWARE\\WOW6432Node\\EA Games, Electronic Arts),
+    __Installer\\installerdata.xml manifests, and EA Games / Origin Games folders across all drives.
+    """
+    games = []
+    ea_folders = []
+    try:
+        import winreg
+        for hive, base_key in [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\EA Games"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\EA Games"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Electronic Arts"),
+        ]:
+            try:
+                with winreg.OpenKey(hive, base_key) as k:
+                    i = 0
+                    while i < 200:
+                        try:
+                            sub_name = winreg.EnumKey(k, i)
+                            i += 1
+                            with winreg.OpenKey(k, sub_name) as sk:
+                                inst_dir = ""
+                                disp_name = sub_name
+                                for val_name in ("Install Dir", "InstallDir", "Path"):
+                                    try:
+                                        v, _ = winreg.QueryValueEx(sk, val_name)
+                                        if v and isinstance(v, str):
+                                            inst_dir = v.strip()
+                                            break
+                                    except Exception:
+                                        pass
+                                try:
+                                    dn, _ = winreg.QueryValueEx(sk, "DisplayName")
+                                    if dn and isinstance(dn, str):
+                                        disp_name = dn.strip()
+                                except Exception:
+                                    pass
+                                if inst_dir and _is_safe_local_file_path(inst_dir) and os.path.isdir(inst_dir):
+                                    ea_folders.append((disp_name, os.path.normpath(inst_dir)))
+                        except OSError:
+                            break
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    for mp in _get_local_drive_roots():
+        for rel in (
+            r"Program Files\EA Games",
+            r"Program Files (x86)\Origin Games",
+            "EA Games",
+            "Origin Games",
+            r"Games\EA Games"
+        ):
+            p = os.path.join(mp, rel)
+            if os.path.isdir(p) and _is_safe_local_file_path(p):
+                try:
+                    for sub in os.listdir(p)[:80]:
+                        sp = os.path.join(p, sub)
+                        if os.path.isdir(sp):
+                            ea_folders.append((sub, sp))
+                except Exception:
+                    pass
+
+    seen = set()
+    for title, folder in ea_folders:
+        f_abs = os.path.abspath(folder)
+        if f_abs.lower() in seen:
+            continue
+        seen.add(f_abs.lower())
+
+        exe_name = ""
+        exe_path = ""
+        # Check __Installer/installerdata.xml for explicit runtime executable
+        xml_p = os.path.join(f_abs, "__Installer", "installerdata.xml")
+        if os.path.isfile(xml_p) and _is_safe_local_file_path(xml_p):
+            try:
+                with open(xml_p, "r", encoding="utf-8", errors="ignore") as f:
+                    xml_txt = f.read(MAX_MANIFEST_READ_BYTES)
+                for m in re.finditer(r'<filePath>([^<]+\.exe)</filePath>', xml_txt, re.IGNORECASE):
+                    raw_rel = re.sub(r'^\[[^\]]+\]\\?', '', m.group(1).strip())
+                    clean_ex = sanitize_exe_name(raw_rel)
+                    if clean_ex and not any(k in clean_ex for k in NON_GAME_EXE_KEYWORDS) and 'trial' not in clean_ex:
+                        cand_p = os.path.abspath(os.path.join(f_abs, raw_rel))
+                        if _is_safe_local_file_path(cand_p) and os.path.commonpath([f_abs, cand_p]) == f_abs and os.path.isfile(cand_p):
+                            exe_name = clean_ex
+                            exe_path = cand_p
+                            break
+            except Exception:
+                pass
+
+        if not exe_name:
+            exe_name, exe_path = _find_best_game_exe_in_folder(f_abs, title)
+        if exe_name:
+            games.append({
+                'game_name': title[:80],
+                'exe_name': exe_name,
+                'exe_path': exe_path or "",
+                'platform': 'EA App'
+            })
+    return games
+
+
+def _scan_battlenet_games():
+    """
+    Scans Blizzard Battle.net games via %APPDATA%\\Battle.net\\Battle.net.config,
+    Windows Uninstall Registry (Blizzard Entertainment), and Battle.net folders across drives.
+    """
+    games = []
+    bnet_folders = []
+
+    appdata = os.environ.get("APPDATA", "")
+    if appdata:
+        cfg_path = os.path.join(appdata, "Battle.net", "Battle.net.config")
+        if os.path.isfile(cfg_path) and _is_safe_local_file_path(cfg_path):
+            try:
+                with open(cfg_path, "r", encoding="utf-8", errors="ignore") as f:
+                    cfg = json.load(f)
+                client_block = cfg.get("Client", {}) if isinstance(cfg, dict) else {}
+                inst_block = client_block.get("Install", {}) if isinstance(client_block, dict) else {}
+                for k_name in ("DefaultInstallPath", "SavedInstallPath"):
+                    p_val = str(inst_block.get(k_name) or "").strip()
+                    if p_val and _is_safe_local_file_path(p_val) and os.path.isdir(p_val):
+                        for sub in os.listdir(p_val)[:50]:
+                            sp = os.path.join(p_val, sub)
+                            if os.path.isdir(sp) and sub.lower() != "battle.net":
+                                bnet_folders.append((sub, sp))
+            except Exception:
+                pass
+
+    for mp in _get_local_drive_roots():
+        for rel in (
+            r"Program Files (x86)\Battle.net\Games",
+            r"Program Files (x86)",
+            "Battle.net",
+            r"Games\Battle.net"
+        ):
+            p = os.path.join(mp, rel)
+            if not os.path.isdir(p) or not _is_safe_local_file_path(p):
+                continue
+            if rel == r"Program Files (x86)":
+                for known_bnet in ("Diablo IV", "Diablo III", "Diablo II Resurrected", "Overwatch", "World of Warcraft", "StarCraft II", "Hearthstone", "Heroes of the Storm", "Call of Duty"):
+                    kp = os.path.join(p, known_bnet)
+                    if os.path.isdir(kp):
+                        bnet_folders.append((known_bnet, kp))
+            else:
+                try:
+                    for sub in os.listdir(p)[:50]:
+                        if sub.lower() == "battle.net":
+                            continue
+                        sp = os.path.join(p, sub)
+                        if os.path.isdir(sp):
+                            bnet_folders.append((sub, sp))
+                except Exception:
+                    pass
+
+    seen = set()
+    for title, folder in bnet_folders:
+        f_abs = os.path.abspath(folder)
+        if f_abs.lower() in seen:
+            continue
+        seen.add(f_abs.lower())
+        # Check _retail_ subfolder for World of Warcraft / Overwatch
+        retail_dir = os.path.join(f_abs, "_retail_")
+        scan_dir = retail_dir if os.path.isdir(retail_dir) else f_abs
+        exe_name, exe_path = _find_best_game_exe_in_folder(scan_dir, title)
+        if exe_name:
+            games.append({
+                'game_name': title[:80],
+                'exe_name': exe_name,
+                'exe_path': exe_path or "",
+                'platform': 'Battle.net'
+            })
+    return games
+
+
+def _scan_gog_galaxy_games():
+    """
+    Scans GOG Galaxy games via Registry (SOFTWARE\\WOW6432Node\\GOG.com\\Games)
+    and goggame-*.info JSON files in GOG Games folders.
+    """
+    games = []
+    seen_dirs = set()
+    try:
+        import winreg
+        for hive, base_key in [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\GOG.com\Games"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\GOG.com\Games"),
+        ]:
+            try:
+                with winreg.OpenKey(hive, base_key) as k:
+                    i = 0
+                    while i < 300:
+                        try:
+                            gid = winreg.EnumKey(k, i)
+                            i += 1
+                            with winreg.OpenKey(k, gid) as sk:
+                                g_name, _ = winreg.QueryValueEx(sk, "gameName")
+                                g_path, _ = winreg.QueryValueEx(sk, "path")
+                                g_exe = ""
+                                try:
+                                    g_exe, _ = winreg.QueryValueEx(sk, "exe")
+                                except Exception:
+                                    pass
+                                if g_name and g_path and _is_safe_local_file_path(g_path) and os.path.isdir(g_path):
+                                    p_abs = os.path.abspath(g_path)
+                                    seen_dirs.add(p_abs.lower())
+                                    exe_name = sanitize_exe_name(g_exe)
+                                    exe_path = g_exe if (g_exe and _is_safe_local_file_path(g_exe) and os.path.isfile(g_exe)) else ""
+                                    if not exe_name or any(kw in exe_name for kw in NON_GAME_EXE_KEYWORDS):
+                                        exe_name, exe_path = _find_best_game_exe_in_folder(p_abs, str(g_name))
+                                    if exe_name:
+                                        games.append({
+                                            'game_name': str(g_name).strip()[:80],
+                                            'exe_name': exe_name,
+                                            'exe_path': exe_path or "",
+                                            'platform': 'GOG'
+                                        })
+                        except OSError:
+                            break
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    for mp in _get_local_drive_roots():
+        for rel in ("GOG Games", r"Program Files (x86)\GOG Galaxy\Games", r"Games\GOG Games"):
+            p = os.path.join(mp, rel)
+            if os.path.isdir(p) and _is_safe_local_file_path(p):
+                try:
+                    for sub in os.listdir(p)[:80]:
+                        sp = os.path.abspath(os.path.join(p, sub))
+                        if os.path.isdir(sp) and sp.lower() not in seen_dirs:
+                            seen_dirs.add(sp.lower())
+                            exe_name, exe_path = _find_best_game_exe_in_folder(sp, sub)
+                            if exe_name:
+                                games.append({
+                                    'game_name': sub[:80],
+                                    'exe_name': exe_name,
+                                    'exe_path': exe_path or "",
+                                    'platform': 'GOG'
+                                })
+                except Exception:
+                    pass
+    return games
+
+
+def _scan_rockstar_games():
+    """
+    Scans Rockstar Games Launcher titles via Registry (SOFTWARE\\WOW6432Node\\Rockstar Games)
+    and Rockstar Games directories across drives.
+    """
+    games = []
+    rstar_folders = []
+    try:
+        import winreg
+        for hive, base_key in [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Rockstar Games"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Rockstar Games"),
+        ]:
+            try:
+                with winreg.OpenKey(hive, base_key) as k:
+                    i = 0
+                    while i < 50:
+                        try:
+                            sub_name = winreg.EnumKey(k, i)
+                            i += 1
+                            if sub_name.lower() in ("launcher", "rockstar games social club", "social club"):
+                                continue
+                            with winreg.OpenKey(k, sub_name) as sk:
+                                for vname in ("InstallFolder", "InstallFolderEpic", "InstallDir"):
+                                    try:
+                                        inst_p, _ = winreg.QueryValueEx(sk, vname)
+                                        if inst_p and isinstance(inst_p, str) and _is_safe_local_file_path(inst_p) and os.path.isdir(inst_p):
+                                            rstar_folders.append((sub_name, os.path.normpath(inst_p)))
+                                            break
+                                    except Exception:
+                                        pass
+                        except OSError:
+                            break
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    for mp in _get_local_drive_roots():
+        for rel in (r"Program Files\Rockstar Games", "Rockstar Games", r"Games\Rockstar Games"):
+            p = os.path.join(mp, rel)
+            if os.path.isdir(p) and _is_safe_local_file_path(p):
+                try:
+                    for sub in os.listdir(p)[:40]:
+                        if sub.lower() in ("launcher", "social club"):
+                            continue
+                        sp = os.path.join(p, sub)
+                        if os.path.isdir(sp):
+                            rstar_folders.append((sub, sp))
+                except Exception:
+                    pass
+
+    seen = set()
+    for title, folder in rstar_folders:
+        f_abs = os.path.abspath(folder)
+        if f_abs.lower() in seen:
+            continue
+        seen.add(f_abs.lower())
+        exe_name, exe_path = _find_best_game_exe_in_folder(f_abs, title)
+        if exe_name:
+            games.append({
+                'game_name': title[:80],
+                'exe_name': exe_name,
+                'exe_path': exe_path or "",
+                'platform': 'Rockstar Games'
+            })
+    return games
+
+
+def _scan_other_launchers_games():
+    """
+    Scans additional PC Game Launchers:
+    - Amazon Games (%LOCALAPPDATA%\\Amazon Games\\Data\\Games\\Sql\\GameInstallInfo.sqlite)
+    - Heroic Games Launcher (%APPDATA%\\heroic\\...\\installed.json)
+    - itch.io (%APPDATA%\\itch\\db\\butler.db)
+    - HoYoPlay / Cognosphere / miHoYo (Genshin Impact, Honkai: Star Rail, Zenless Zone Zero)
+    - Wargaming.net Game Center (%ProgramData%\\Wargaming.net\\GameCenter\\apps)
+    """
+    games = []
+    local_app = os.environ.get("LOCALAPPDATA", "")
+    appdata = os.environ.get("APPDATA", "")
+
+    # 1. Amazon Games SQLite DB
+    if local_app:
+        amz_db = os.path.join(local_app, "Amazon Games", "Data", "Games", "Sql", "GameInstallInfo.sqlite")
+        if os.path.isfile(amz_db) and _is_safe_local_file_path(amz_db):
+            try:
+                conn = sqlite3.connect(f"file:{amz_db}?mode=ro", uri=True, timeout=1.5)
+                cur = conn.cursor()
+                cur.execute("SELECT ProductTitle, InstallDirectory FROM DbSet WHERE Installed = 1 LIMIT 200")
+                for p_title, inst_dir in cur.fetchall():
+                    if p_title and inst_dir and _is_safe_local_file_path(inst_dir) and os.path.isdir(inst_dir):
+                        exe_name, exe_path = _find_best_game_exe_in_folder(inst_dir, str(p_title))
+                        if exe_name:
+                            games.append({
+                                'game_name': str(p_title).strip()[:80],
+                                'exe_name': exe_name,
+                                'exe_path': exe_path or "",
+                                'platform': 'Amazon Games'
+                            })
+                conn.close()
+            except Exception:
+                pass
+
+    # 2. Heroic Games Launcher (Epic / Legendary, GOG, Amazon / Nile)
+    if appdata:
+        heroic_root = os.path.join(appdata, "heroic")
+        if os.path.isdir(heroic_root):
+            for rel_json in (
+                os.path.join("legendaryConfig", "legendary", "installed.json"),
+                os.path.join("gog_store", "installed.json"),
+                os.path.join("nile_config", "nile", "installed.json"),
+            ):
+                jpath = os.path.join(heroic_root, rel_json)
+                if os.path.isfile(jpath) and _is_safe_local_file_path(jpath):
+                    try:
+                        with open(jpath, "r", encoding="utf-8", errors="ignore") as f:
+                            hdata = json.load(f)
+                        items = []
+                        if isinstance(hdata, dict):
+                            items = list(hdata.get("installed", [])) if isinstance(hdata.get("installed"), list) else list(hdata.values())
+                        elif isinstance(hdata, list):
+                            items = hdata
+                        for entry in items[:150]:
+                            if not isinstance(entry, dict):
+                                continue
+                            g_title = str(entry.get("title") or entry.get("app_name") or "").strip()
+                            inst_p = str(entry.get("install_path") or "").strip()
+                            if g_title and inst_p and _is_safe_local_file_path(inst_p) and os.path.isdir(inst_p):
+                                exe_name, exe_path = _find_best_game_exe_in_folder(inst_p, g_title)
+                                if exe_name:
+                                    games.append({
+                                        'game_name': g_title[:80],
+                                        'exe_name': exe_name,
+                                        'exe_path': exe_path or "",
+                                        'platform': 'Heroic'
+                                    })
+                    except Exception:
+                        pass
+
+    # 3. itch.io App (butler.db)
+    if appdata:
+        itch_db = os.path.join(appdata, "itch", "db", "butler.db")
+        if os.path.isfile(itch_db) and _is_safe_local_file_path(itch_db):
+            try:
+                conn = sqlite3.connect(f"file:{itch_db}?mode=ro", uri=True, timeout=1.5)
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT g.title, il.path, c.install_folder
+                    FROM caves c
+                    JOIN games g ON c.game_id = g.id
+                    JOIN install_locations il ON c.install_location_id = il.id
+                    LIMIT 150
+                """)
+                for g_title, base_p, sub_f in cur.fetchall():
+                    if g_title and base_p and sub_f:
+                        full_dir = os.path.join(str(base_p), str(sub_f))
+                        if _is_safe_local_file_path(full_dir) and os.path.isdir(full_dir):
+                            exe_name, exe_path = _find_best_game_exe_in_folder(full_dir, str(g_title))
+                            if exe_name:
+                                games.append({
+                                    'game_name': str(g_title).strip()[:80],
+                                    'exe_name': exe_name,
+                                    'exe_path': exe_path or "",
+                                    'platform': 'itch.io'
+                                })
+                conn.close()
+            except Exception:
+                pass
+
+    # 4. HoYoPlay / Cognosphere (Genshin Impact, Honkai: Star Rail, Zenless Zone Zero)
+    for mp in _get_local_drive_roots():
+        for rel in (
+            r"Program Files\HoYoPlay\games",
+            r"HoYoPlay\games",
+            "Genshin Impact",
+            "Star Rail",
+            "ZenlessZoneZero Game",
+        ):
+            p = os.path.join(mp, rel)
+            if os.path.isdir(p) and _is_safe_local_file_path(p):
+                try:
+                    if p.lower().endswith("games"):
+                        for sub in os.listdir(p)[:20]:
+                            sp = os.path.join(p, sub)
+                            if os.path.isdir(sp):
+                                exe_name, exe_path = _find_best_game_exe_in_folder(sp, sub)
+                                if exe_name:
+                                    games.append({'game_name': sub.replace(" Game", "")[:80], 'exe_name': exe_name, 'exe_path': exe_path or "", 'platform': 'HoYoPlay'})
+                    else:
+                        title = os.path.basename(p).replace(" Game", "")
+                        exe_name, exe_path = _find_best_game_exe_in_folder(p, title)
+                        if exe_name:
+                            games.append({'game_name': title[:80], 'exe_name': exe_name, 'exe_path': exe_path or "", 'platform': 'HoYoPlay'})
+                except Exception:
+                    pass
+
+    # 5. Wargaming.net Game Center (World of Tanks, World of Warships, World of Warplanes)
+    for mp in _get_local_drive_roots():
+        wg_dir = os.path.join(mp, "Games")
+        if os.path.isdir(wg_dir) and _is_safe_local_file_path(wg_dir):
+            for wg_title in ("World_of_Tanks", "World_of_Tanks_EU", "World_of_Warships", "World_of_Warships_EU", "World_of_Warplanes"):
+                w_p = os.path.join(wg_dir, wg_title)
+                if os.path.isdir(w_p):
+                    clean_t = wg_title.replace("_EU", "").replace("_", " ")
+                    exe_name, exe_path = _find_best_game_exe_in_folder(w_p, clean_t)
+                    if exe_name:
+                        games.append({'game_name': clean_t, 'exe_name': exe_name, 'exe_path': exe_path or "", 'platform': 'Wargaming'})
+
+    return games
+
+
+def _scan_standalone_and_registry_games(custom_dirs=None):
+    """
+    Scans common game directories on local drives (Games, Oyunlar, PC Games),
+    user-added custom directories, and Windows Uninstall Registry entries located inside game folders.
+    """
+    games = []
+    candidate_folders = []
+
+    for mp in _get_local_drive_roots():
+        for root_name, platform_label in [
+            ("Games", "Yerel Oyun"),
+            ("Oyunlar", "Yerel Oyun"),
+            ("PC Games", "Yerel Oyun"),
+            (r"Program Files\Epic Games", "Epic Games"),
+        ]:
+            parent_dir = os.path.join(mp, root_name)
+            if os.path.isdir(parent_dir) and _is_safe_local_file_path(parent_dir):
+                try:
+                    for sub in os.listdir(parent_dir)[:80]:
+                        if sub.lower() in ('riot client', 'directx', 'redist', 'steamlibrary', 'xboxgames', 'gog games', 'ea games'):
+                            continue
+                        sub_p = os.path.join(parent_dir, sub)
+                        if os.path.isdir(sub_p):
+                            candidate_folders.append((sub, sub_p, platform_label))
+                except Exception:
+                    pass
+
+    # User-specified custom game library directories
+    if custom_dirs and isinstance(custom_dirs, (list, tuple)):
+        for c_dir in custom_dirs:
+            if not c_dir or not isinstance(c_dir, str) or not _is_safe_local_file_path(c_dir) or not os.path.isdir(c_dir):
+                continue
+            try:
+                # Check if c_dir itself is a single game folder or a parent directory of games
+                direct_exe, direct_path = _find_best_game_exe_in_folder(c_dir, os.path.basename(c_dir), max_depth=1)
+                subdirs = [os.path.join(c_dir, s) for s in os.listdir(c_dir)[:120] if os.path.isdir(os.path.join(c_dir, s))]
+                if direct_exe and len(subdirs) <= 6:
+                    candidate_folders.append((os.path.basename(c_dir), c_dir, "Özel Klasör"))
+                else:
+                    for s_p in subdirs:
+                        s_name = os.path.basename(s_p)
+                        if s_name.lower() not in SKIP_SUBDIRS:
+                            candidate_folders.append((s_name, s_p, "Özel Klasör"))
+            except Exception:
+                pass
+
+    # Windows Uninstall Registry scan for standalone games installed in Games/Oyunlar or known game publishers
+    known_game_publishers = (
+        'ubisoft', 'electronic arts', 'ea ', 'rockstar', 'blizzard', 'activision',
+        'bethesda', 'cd projekt', 'capcom', 'bandai namco', 'square enix', 'sega',
+        'konami', 'sony interactive', 'playstation', 'xbox game studios', '2k ',
+        'take-two', 'paradox', 'focus entertainment', 'thq nordic', 'deep silver',
+        'devolver', 'larian', 'remedy', 'techland', 'fromsoftware', 'kojima',
+        'wb games', 'warner bros', 'cognosphere', 'mihoyo', 'kuro games', 'wargaming',
+        'gaijin', 'bossa', 'klei', 're-logic', 'mojang', 'coffee stain', 'frontier',
+        'bohemia interactive', 'crytek', 'id software', 'bungie', 'Embark', 'pearl abyss'
+    )
+    try:
+        import winreg
+        for hive, reg_path in [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        ]:
+            try:
+                with winreg.OpenKey(hive, reg_path) as k:
+                    num_sub = winreg.QueryInfoKey(k)[0]
+                    for i in range(min(num_sub, 600)):
+                        try:
+                            sk_name = winreg.EnumKey(k, i)
+                            with winreg.OpenKey(k, sk_name) as sk:
+                                disp_name = ""
+                                inst_loc = ""
+                                publisher = ""
+                                try:
+                                    disp_name, _ = winreg.QueryValueEx(sk, "DisplayName")
+                                except Exception:
+                                    continue
+                                try:
+                                    inst_loc, _ = winreg.QueryValueEx(sk, "InstallLocation")
+                                except Exception:
+                                    pass
+                                try:
+                                    publisher, _ = winreg.QueryValueEx(sk, "Publisher")
+                                except Exception:
+                                    pass
+                                disp_str = str(disp_name or "").strip()
+                                loc_str = str(inst_loc or "").strip().strip('"')
+                                pub_low = str(publisher or "").strip().lower()
+                                if not disp_str or not loc_str or not _is_safe_local_file_path(loc_str) or not os.path.isdir(loc_str):
+                                    continue
+                                loc_low = loc_str.lower()
+                                is_game_path = any(g_tok in loc_low for g_tok in (r'\games\\', r'\oyunlar\\', r'\pc games\\', r'\gog games\\', r'\ea games\\', r'\ubisoft\\'))
+                                is_game_pub = any(pub_tok in pub_low for pub_tok in known_game_publishers)
+                                if is_game_path or is_game_pub:
+                                    if any(skip_w in disp_str.lower() for skip_w in (
+                                        'launcher', 'sdk', 'redistributable', 'driver', 'runtime',
+                                        'social club', 'game center', 'battle.net', 'ubisoft connect',
+                                        'ea app', 'gog galaxy', 'epic games', 'online services'
+                                    )):
+                                        continue
+                                    candidate_folders.append((disp_str, os.path.normpath(loc_str), "PC Oyunu"))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    seen_folders = set()
     for g_title, folder_p, plat in candidate_folders[:MAX_SCAN_DIRS]:
-        exe_name, exe_path = _find_best_game_exe_in_folder(folder_p, g_title)
+        f_abs = os.path.abspath(folder_p)
+        if f_abs.lower() in seen_folders:
+            continue
+        seen_folders.add(f_abs.lower())
+        exe_name, exe_path = _find_best_game_exe_in_folder(f_abs, g_title)
         if exe_name:
             games.append({
                 'game_name': g_title[:80],
@@ -311,14 +1165,31 @@ def _scan_standalone_and_registry_games():
     return games
 
 
-def scan_installed_games():
+def scan_installed_games(custom_dirs=None):
     """
-    🔍 Scans Steam, Epic Games, Xbox/Riot/EA/Ubisoft/GOG folders and returns a deduplicated list of installed games.
+    🔍 Scans all major PC Game Launchers (Steam, Epic Games, Xbox/PC Game Pass, Riot Games,
+    EA App/Origin, Ubisoft Connect, Battle.net, GOG Galaxy, Rockstar Games, Amazon Games,
+    Heroic, itch.io, HoYoPlay, Wargaming, Windows Registry, and Custom Folders) and returns
+    a deduplicated list of installed games.
     """
     all_games = []
     seen_exes = set()
 
-    for scanner in (_scan_steam_games, _scan_epic_games, _scan_standalone_and_registry_games):
+    scanners = (
+        _scan_steam_games,
+        _scan_epic_games,
+        _scan_xbox_gamepass_games,
+        _scan_riot_games,
+        _scan_ea_origin_games,
+        _scan_ubisoft_games,
+        _scan_battlenet_games,
+        _scan_gog_galaxy_games,
+        _scan_rockstar_games,
+        _scan_other_launchers_games,
+        lambda: _scan_standalone_and_registry_games(custom_dirs=custom_dirs),
+    )
+
+    for scanner in scanners:
         try:
             for item in scanner():
                 exe = sanitize_exe_name(item.get('exe_name', ''))
@@ -458,6 +1329,12 @@ class GameProfileManagerDialog(QDialog):
                 if clean_k and isinstance(v, dict):
                     self.game_profiles[clean_k] = dict(v)
 
+        raw_custom_dirs = self.gui.app_settings.get('custom_game_scan_dirs', [])
+        self.custom_scan_dirs = [
+            d for d in (raw_custom_dirs if isinstance(raw_custom_dirs, list) else [])
+            if isinstance(d, str) and _is_safe_local_file_path(d) and os.path.isdir(d)
+        ]
+
         self.discovered_games = []
         self.row_widgets = []
         self.active_quick_filter = "all"
@@ -555,7 +1432,7 @@ class GameProfileManagerDialog(QDialog):
 
         main_layout.addWidget(grp_top)
 
-        # Toolbar: Search + Quick Filter Pills + Rescan + Add Custom .exe + Add Running Process
+        # Toolbar: Search + Quick Filter Pills + Platform Launcher Filter + Rescan + Add Custom Folder + Add Custom .exe + Add Running Process
         bar = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("🔍 Yüklü oyunlarda veya .exe adlarında ara (Örn: Counter-Strike, Valorant, Cyberpunk, cs2.exe)...")
@@ -563,7 +1440,7 @@ class GameProfileManagerDialog(QDialog):
         bar.addWidget(self.search_input, stretch=1)
 
         self.filter_pill_btns = {}
-        for f_key, f_lbl in [("all", "Tümü"), ("bound", "🔗 Bağlı"), ("unbound", "⚪ Bağsız"), ("steam", "Steam"), ("epic", "Epic")]:
+        for f_key, f_lbl in [("all", "Tümü"), ("bound", "🔗 Bağlı"), ("unbound", "⚪ Bağsız")]:
             b_f = QPushButton(f_lbl)
             b_f.setCheckable(True)
             b_f.setChecked(f_key == "all")
@@ -575,10 +1452,41 @@ class GameProfileManagerDialog(QDialog):
             self.filter_pill_btns[f_key] = b_f
             bar.addWidget(b_f)
 
+        self.combo_platform_filter = QComboBox()
+        self.combo_platform_filter.setMinimumWidth(145)
+        self.combo_platform_filter.setToolTip("Oyun Başlatıcısına (Launcher) Göre Filtrele")
+        for p_key, p_lbl in [
+            ("all", "🌐 Tüm Başlatıcılar"),
+            ("steam", "🟦 Steam"),
+            ("epic", "⬛ Epic Games"),
+            ("xbox", "🟩 Xbox / Game Pass"),
+            ("riot", "🟥 Riot Games"),
+            ("ea", "🟧 EA App / Origin"),
+            ("ubisoft", "🟪 Ubisoft Connect"),
+            ("battle.net", "🟦 Battle.net"),
+            ("gog", "🟪 GOG Galaxy"),
+            ("rockstar", "🟨 Rockstar Games"),
+            ("amazon", "🟧 Amazon Games"),
+            ("heroic", "🟦 Heroic Launcher"),
+            ("itch", "🟥 itch.io"),
+            ("hoyo", "🟦 HoYoPlay"),
+            ("wargaming", "🟧 Wargaming"),
+            ("local", "📁 Yerel / Özel"),
+        ]:
+            self.combo_platform_filter.addItem(p_lbl, p_key)
+        self.combo_platform_filter.currentIndexChanged.connect(lambda _: self.filter_game_rows(self.search_input.text()))
+        bar.addWidget(self.combo_platform_filter)
+
         btn_rescan = QPushButton("🔄 Yüklü Oyunları Tara")
         btn_rescan.setStyleSheet("background: #171f33; color: #38bdf8; font-weight: 700; border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 6px; padding: 6px 12px;")
         btn_rescan.clicked.connect(self.rescan_system_games)
         bar.addWidget(btn_rescan)
+
+        btn_add_folder = QPushButton("📁 Klasör Tara")
+        btn_add_folder.setToolTip("Özel bir oyun klasörünü (Örn: D:\\Oyunlar) tarama listesine ekle")
+        btn_add_folder.setStyleSheet("background: #171f33; color: #fbbf24; font-weight: 700; border: 1px solid rgba(251, 191, 36, 0.35); border-radius: 6px; padding: 6px 12px;")
+        btn_add_folder.clicked.connect(self.add_custom_game_scan_folder)
+        bar.addWidget(btn_add_folder)
 
         btn_add_exe = QPushButton("📂 Oyun (.exe) Seç")
         btn_add_exe.setStyleSheet("background: #8083ff; color: #07006c; font-weight: 800; border: none; border-radius: 6px; padding: 6px 12px;")
@@ -666,7 +1574,7 @@ class GameProfileManagerDialog(QDialog):
         main_layout.addLayout(ftr)
 
     def rescan_system_games(self):
-        scanned = scan_installed_games()
+        scanned = scan_installed_games(custom_dirs=getattr(self, 'custom_scan_dirs', None))
         merged = {}
 
         # 1. Include all saved user bindings first so custom games are always preserved
@@ -679,7 +1587,7 @@ class GameProfileManagerDialog(QDialog):
                 'theme_name': prof.get('theme_name', '')
             }
 
-        # 2. Merge auto-discovered games from Steam, Epic, Riot, Xbox, etc.
+        # 2. Merge auto-discovered games from Steam, Epic, Riot, Xbox, EA, Ubisoft, Battle.net, GOG, Rockstar, etc.
         for g in scanned:
             exe_k = g['exe_name']
             if exe_k in merged:
@@ -703,6 +1611,18 @@ class GameProfileManagerDialog(QDialog):
         )
         self.rebuild_game_list_ui()
 
+    def _update_game_count_banner(self):
+        bound_count = sum(1 for g in self.discovered_games if g.get('theme_name'))
+        plat_counts = {}
+        for g in self.discovered_games:
+            pl = str(g.get('platform') or 'PC')
+            plat_counts[pl] = plat_counts.get(pl, 0) + 1
+        plat_summary = " • ".join(f"{k}: {v}" for k, v in sorted(plat_counts.items(), key=lambda x: -x[1])[:6])
+        extra = f"  ({plat_summary})" if plat_summary else ""
+        self.lbl_count.setText(
+            f"📦 Sistemde {len(self.discovered_games)} oyun bulundu{extra}  |  🔗 Temaya Bağlı: {bound_count}"
+        )
+
     def rebuild_game_list_ui(self):
         while self.list_layout.count():
             item = self.list_layout.takeAt(0)
@@ -711,10 +1631,7 @@ class GameProfileManagerDialog(QDialog):
                 w.deleteLater()
         self.row_widgets.clear()
 
-        bound_count = sum(1 for g in self.discovered_games if g.get('theme_name'))
-        self.lbl_count.setText(
-            f"📦 Sistemde {len(self.discovered_games)} oyun listeleniyor  |  🔗 Temaya Bağlı Oyun Sayısı: {bound_count}"
-        )
+        self._update_game_count_banner()
 
         platform_colors = {
             'Steam': '#0284c7',
@@ -725,6 +1642,15 @@ class GameProfileManagerDialog(QDialog):
             'Ubisoft': '#4f46e5',
             'EA App': '#ea580c',
             'GOG': '#7c3aed',
+            'Rockstar Games': '#d97706',
+            'Amazon Games': '#f59e0b',
+            'Heroic': '#0891b2',
+            'itch.io': '#fa5c5c',
+            'HoYoPlay': '#3b82f6',
+            'Wargaming': '#dc2626',
+            'Özel Klasör': '#0d9488',
+            'Yerel Oyun': '#6366f1',
+            'PC Oyunu': '#6366f1',
         }
 
         for game in self.discovered_games:
@@ -834,10 +1760,7 @@ class GameProfileManagerDialog(QDialog):
                 g['theme_name'] = chosen_theme
                 break
 
-        bound_count = sum(1 for g in self.discovered_games if g.get('theme_name'))
-        self.lbl_count.setText(
-            f"📦 Sistemde {len(self.discovered_games)} oyun listeleniyor  |  🔗 Temaya Bağlı Oyun Sayısı: {bound_count}"
-        )
+        self._update_game_count_banner()
         self.filter_game_rows(self.search_input.text())
 
     def preview_theme_ByName(self, theme_name, game_name=""):
@@ -888,6 +1811,10 @@ class GameProfileManagerDialog(QDialog):
     def filter_game_rows(self, query_text=""):
         q = str(query_text or '').strip().lower()
         mode = getattr(self, 'active_quick_filter', 'all')
+        plat_filter = "all"
+        if hasattr(self, 'combo_platform_filter'):
+            plat_filter = str(self.combo_platform_filter.currentData() or 'all').lower()
+
         for row_tuple in self.row_widgets:
             card = row_tuple[0]
             search_blob = row_tuple[1]
@@ -900,11 +1827,31 @@ class GameProfileManagerDialog(QDialog):
                 matches_m = is_bound
             elif mode == "unbound":
                 matches_m = not is_bound
-            elif mode == "steam":
-                matches_m = "steam" in plat_l
-            elif mode == "epic":
-                matches_m = "epic" in plat_l
-            card.setVisible(matches_q and matches_m)
+
+            matches_plat = True
+            if plat_filter != "all":
+                if plat_filter == "local":
+                    matches_plat = any(tok in plat_l for tok in ("yerel", "özel", "pc", "açık"))
+                else:
+                    matches_plat = plat_filter in plat_l
+
+            card.setVisible(matches_q and matches_m and matches_plat)
+
+    def add_custom_game_scan_folder(self):
+        """Allows the user to add any custom games directory (e.g., D:\\Oyunlar) to the scanner."""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "📁 Taranacak Oyun Klasörünü Seçin (Örn: D:\\Oyunlar veya H:\\Games)",
+            "C:\\"
+        )
+        if not folder or not _is_safe_local_file_path(folder) or not os.path.isdir(folder):
+            return
+        norm_f = os.path.abspath(folder)
+        if norm_f not in self.custom_scan_dirs:
+            self.custom_scan_dirs.append(norm_f)
+        self.gui.app_settings['custom_game_scan_dirs'] = list(self.custom_scan_dirs)
+        self.gui.save_app_settings()
+        self.rescan_system_games()
 
     def add_custom_game_exe(self):
         exe_file, _ = QFileDialog.getOpenFileName(
@@ -1010,6 +1957,7 @@ class GameProfileManagerDialog(QDialog):
                 }
 
         self.gui.app_settings['game_profiles'] = clean_profiles
+        self.gui.app_settings['custom_game_scan_dirs'] = list(getattr(self, 'custom_scan_dirs', []))
         self.gui.app_settings['auto_game_theme_enabled'] = self.chk_enable_game_profiles.isChecked()
         self.gui.app_settings['keep_game_theme_on_alttab'] = self.chk_keep_on_alttab.isChecked()
         self.gui.app_settings['auto_game_theme_name'] = str(self.combo_fallback_theme.currentData() or '').strip()
