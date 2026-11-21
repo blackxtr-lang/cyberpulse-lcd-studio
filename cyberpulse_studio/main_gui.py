@@ -141,7 +141,7 @@ RGB_APP_SCRIPT = os.path.join(APP_BUNDLE_DIR, 'rgb_studio_gui.py')
 VERSION_FILE = os.path.join(APP_BUNDLE_DIR, 'version.json')
 os.makedirs(PRESET_THEMES_DIR, exist_ok=True)
 
-APP_VERSION = "1.4.2"
+APP_VERSION = "1.4.3"
 try:
     if os.path.isfile(VERSION_FILE) and os.path.getsize(VERSION_FILE) <= 16384:
         with open(VERSION_FILE, 'r', encoding='utf-8') as _vf:
@@ -5477,10 +5477,17 @@ class CyberPulseStudioGUI(QMainWindow):
                 desc = p.get('description', '')
                 is_lcd = p.get('is_lcd', False)
                 icon = "🖥️" if is_lcd else "🔌"
-                label = f"{icon} {dev} ({desc})"
+                short_tag = "LCD" if is_lcd else (desc[:10].strip() if desc else "Seri")
+                label = f"{icon} {dev} ({short_tag})"
                 self.combo_port.addItem(label, dev)
+                self.combo_port.setItemData(i, f"{dev} — {desc}", Qt.ToolTipRole)
                 if dev == saved_port:
                     target_idx = i
+            try:
+                if self.combo_port.view():
+                    self.combo_port.view().setMinimumWidth(220)
+            except Exception:
+                pass
 
             if saved_port == 'auto':
                 target_idx = 0
@@ -5905,6 +5912,7 @@ class CyberPulseStudioGUI(QMainWindow):
         # ROW 1: LIVE TELEMETRY & STREAM OUTPUT BAR (#131b2e, No Duplicate Menus)
         # ───────────────────────────────────────────────────────────────────────────
         header_frame = QFrame()
+        self.header_frame = header_frame
         header_frame.setObjectName("stitchStudioHeaderCard")
         header_frame.setStyleSheet("""
             QFrame#stitchStudioHeaderCard {
@@ -5918,33 +5926,49 @@ class CyberPulseStudioGUI(QMainWindow):
 
         # Left Telemetry Pill Container (#060e20)
         telem_pill = QFrame()
+        self.telem_pill_frame = telem_pill
+        telem_pill.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
         telem_pill.setStyleSheet("QFrame { background-color: #060e20; border: 1px solid #1e293b; border-radius: 7px; }")
         tp_hbox = QHBoxLayout(telem_pill)
-        tp_hbox.setContentsMargins(8, 4, 8, 4)
-        tp_hbox.setSpacing(8)
+        tp_hbox.setContentsMargins(6, 3, 6, 3)
+        tp_hbox.setSpacing(6)
 
-        self.lbl_top_gpu_pill = QLabel("GPU: --°C (--%)")
-        self.lbl_top_gpu_pill.setMinimumWidth(98)
-        self.lbl_top_gpu_pill.setStyleSheet("color: #7bd0ff; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_top_gpu_pill = QLabel("GPU: --°C")
+        self.lbl_top_gpu_pill.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        self.lbl_top_gpu_pill.setStyleSheet(
+            "background: #0d1629; color: #7bd0ff; font-family: 'Consolas', monospace; font-size: 11px; "
+            "font-weight: 800; border: 1px solid #1e293b; border-radius: 5px; padding: 2px 7px;"
+        )
         tp_hbox.addWidget(self.lbl_top_gpu_pill)
 
-        self.lbl_top_cpu_pill = QLabel("CPU: --°C (--%)")
-        self.lbl_top_cpu_pill.setMinimumWidth(98)
-        self.lbl_top_cpu_pill.setStyleSheet("color: #c0c1ff; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_top_cpu_pill = QLabel("CPU: --°C")
+        self.lbl_top_cpu_pill.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        self.lbl_top_cpu_pill.setStyleSheet(
+            "background: #0d1629; color: #c0c1ff; font-family: 'Consolas', monospace; font-size: 11px; "
+            "font-weight: 800; border: 1px solid #1e293b; border-radius: 5px; padding: 2px 7px;"
+        )
         tp_hbox.addWidget(self.lbl_top_cpu_pill)
 
         self.lbl_top_ram_pill = QLabel("RAM: -- GB")
-        self.lbl_top_ram_pill.setMinimumWidth(84)
-        self.lbl_top_ram_pill.setStyleSheet("color: #4edea3; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_top_ram_pill.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        self.lbl_top_ram_pill.setStyleSheet(
+            "background: #0d1629; color: #4edea3; font-family: 'Consolas', monospace; font-size: 11px; "
+            "font-weight: 800; border: 1px solid #1e293b; border-radius: 5px; padding: 2px 7px;"
+        )
         tp_hbox.addWidget(self.lbl_top_ram_pill)
 
         tp_sep2 = QLabel("|")
+        self.lbl_top_sep2 = tp_sep2
+        tp_sep2.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
         tp_sep2.setStyleSheet("color: #2d3449; font-weight: 900; border: none; background: transparent;")
         tp_hbox.addWidget(tp_sep2)
 
         self.lbl_top_res_pill = QLabel(f"{init_w}×{init_h}")
-        self.lbl_top_res_pill.setMinimumWidth(64)
-        self.lbl_top_res_pill.setStyleSheet("color: #908fa0; font-family: 'Consolas', monospace; font-size: 10px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_top_res_pill.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        self.lbl_top_res_pill.setStyleSheet(
+            "background: #0d1629; color: #908fa0; font-family: 'Consolas', monospace; font-size: 10px; "
+            "font-weight: 800; border: 1px solid #1e293b; border-radius: 5px; padding: 2px 6px;"
+        )
         tp_hbox.addWidget(self.lbl_top_res_pill)
 
         nav_box.addWidget(telem_pill)
@@ -5957,6 +5981,7 @@ class CyberPulseStudioGUI(QMainWindow):
         tp_lay.setContentsMargins(7, 2, 4, 2)
         tp_lay.setSpacing(4)
         lbl_target = QLabel("HEDEF:")
+        self.lbl_top_target_cap = lbl_target
         lbl_target.setStyleSheet("font-weight: 900; color: #908fa0; font-size: 9px; border: none; background: transparent;")
         tp_lay.addWidget(lbl_target)
 
@@ -5981,12 +6006,14 @@ class CyberPulseStudioGUI(QMainWindow):
         pp_lay.setContentsMargins(7, 2, 4, 2)
         pp_lay.setSpacing(4)
         lbl_port = QLabel("PORT:")
+        self.lbl_top_port_cap = lbl_port
         lbl_port.setStyleSheet("font-weight: 900; color: #908fa0; font-size: 9px; border: none; background: transparent;")
         pp_lay.addWidget(lbl_port)
 
         self.combo_port = QComboBox()
         self.combo_port.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self.combo_port.setMinimumWidth(142)
+        self.combo_port.setMinimumWidth(128)
+        self.combo_port.setMaximumWidth(165)
         self.combo_port.setStyleSheet("background: #131b2e; border: none; border-radius: 4px; padding: 2px 6px; color: #4edea3; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800;")
         self.combo_port.currentIndexChanged.connect(self.on_port_selection_changed)
         pp_lay.addWidget(self.combo_port)
@@ -7076,6 +7103,92 @@ class CyberPulseStudioGUI(QMainWindow):
         super().resizeEvent(event)
         if hasattr(self, 'canvas_widget') and hasattr(self.canvas_widget, 'update_geometry_for_theme'):
             self.canvas_widget.update_geometry_for_theme()
+        if hasattr(self, '_update_top_bar_telemetry_text'):
+            self._update_top_bar_telemetry_text()
+
+    def _update_top_bar_telemetry_text(self, metrics=None):
+        """
+        📐 Responsive Top Bar Telemetry Formatter:
+        Adapts GPU/CPU/RAM/Resolution pills and header captions based on the current window width
+        so that telemetry items NEVER overlap, crowd, or clip when the user resizes the window smaller.
+        """
+        try:
+            if isinstance(metrics, dict) and metrics:
+                self._last_top_bar_metrics = metrics
+            else:
+                metrics = getattr(self, '_last_top_bar_metrics', None) or getattr(getattr(self, 'sensor', None), 'cached_sensors', {}) or {}
+
+            win_w = int(self.width())
+            cpu_t = str(metrics.get('cpu_temp', '--°C')).strip()
+            cpu_l = str(metrics.get('cpu_load', '--%')).strip()
+            gpu_t = str(metrics.get('gpu_temp', '--°C')).strip()
+            gpu_l = str(metrics.get('gpu_load', '--%')).strip()
+            ram_u = str(metrics.get('ram_used', '-- GB')).strip()
+
+            # Breakpoint 1: Wide window (>= 1360 px) -> Full telemetry + resolution badge + captions
+            # Breakpoint 2: Medium window (1150..1359 px) -> Compact telemetry, hide redundant res badge & captions
+            # Breakpoint 3: Narrow window (< 1150 px) -> Ultra-compact telemetry, hide status pill & brightness % label
+            is_wide = (win_w >= 1360)
+            is_medium = (1150 <= win_w < 1360)
+
+            if hasattr(self, 'lbl_top_gpu_pill'):
+                if is_wide:
+                    self.lbl_top_gpu_pill.setText(f"GPU: {gpu_t} ({gpu_l})")
+                elif is_medium:
+                    self.lbl_top_gpu_pill.setText(f"GPU {gpu_t}•{gpu_l}")
+                else:
+                    self.lbl_top_gpu_pill.setText(f"GPU {gpu_t}")
+                self.lbl_top_gpu_pill.setToolTip(f"GPU Sıcaklığı: {gpu_t} | GPU Yükü: {gpu_l}")
+
+            if hasattr(self, 'lbl_top_cpu_pill'):
+                if is_wide:
+                    self.lbl_top_cpu_pill.setText(f"CPU: {cpu_t} ({cpu_l})")
+                elif is_medium:
+                    self.lbl_top_cpu_pill.setText(f"CPU {cpu_t}•{cpu_l}")
+                else:
+                    self.lbl_top_cpu_pill.setText(f"CPU {cpu_t}")
+                self.lbl_top_cpu_pill.setToolTip(f"CPU Sıcaklığı: {cpu_t} | CPU Yükü: {cpu_l}")
+
+            if hasattr(self, 'lbl_top_ram_pill'):
+                if is_wide or is_medium:
+                    self.lbl_top_ram_pill.setText(f"RAM: {ram_u}")
+                else:
+                    short_ram = ram_u.replace(" GB", "G").split("/")[0].strip()
+                    self.lbl_top_ram_pill.setText(f"RAM {short_ram}")
+                self.lbl_top_ram_pill.setToolTip(f"Sistem Bellek Kullanımı: {ram_u}")
+
+            if hasattr(self, 'lbl_top_res_pill'):
+                self.lbl_top_res_pill.setVisible(is_wide)
+            if hasattr(self, 'lbl_top_sep2'):
+                self.lbl_top_sep2.setVisible(is_wide)
+            if hasattr(self, 'lbl_top_target_cap'):
+                self.lbl_top_target_cap.setVisible(is_wide)
+            if hasattr(self, 'lbl_top_port_cap'):
+                self.lbl_top_port_cap.setVisible(is_wide)
+            if hasattr(self, 'lbl_port_status'):
+                self.lbl_port_status.setVisible(win_w >= 1120)
+            if hasattr(self, 'lbl_top_brightness_val'):
+                self.lbl_top_brightness_val.setVisible(win_w >= 1080)
+
+            for pill_lbl in (
+                getattr(self, 'lbl_top_gpu_pill', None),
+                getattr(self, 'lbl_top_cpu_pill', None),
+                getattr(self, 'lbl_top_ram_pill', None),
+                getattr(self, 'lbl_top_res_pill', None),
+            ):
+                if pill_lbl is not None and pill_lbl.isVisible():
+                    pill_lbl.setMinimumWidth(0)
+                    pill_lbl.setMaximumWidth(16777215)
+                    pill_lbl.setFixedWidth(pill_lbl.sizeHint().width() + 4)
+            if hasattr(self, 'telem_pill_frame') and self.telem_pill_frame.layout():
+                self.telem_pill_frame.setMinimumWidth(0)
+                self.telem_pill_frame.setMaximumWidth(16777215)
+                self.telem_pill_frame.layout().activate()
+                self.telem_pill_frame.setFixedWidth(self.telem_pill_frame.sizeHint().width())
+            if hasattr(self, 'header_frame') and self.header_frame.layout():
+                self.header_frame.layout().activate()
+        except Exception as e:
+            print("_update_top_bar_telemetry_text note:", e)
 
     def auto_adjust_window_to_canvas(self, tw=None, th=None):
         """
@@ -9332,12 +9445,7 @@ class CyberPulseStudioGUI(QMainWindow):
                 frame_pil = self.hardware.render_theme_frame(self.theme_data, metrics, for_hardware=False)
 
             if isinstance(metrics, dict):
-                if hasattr(self, 'lbl_top_cpu_pill'):
-                    self.lbl_top_cpu_pill.setText(f"CPU: {metrics.get('cpu_temp', '--°C')} ({metrics.get('cpu_load', '--%')})")
-                if hasattr(self, 'lbl_top_gpu_pill'):
-                    self.lbl_top_gpu_pill.setText(f"GPU: {metrics.get('gpu_temp', '--°C')} ({metrics.get('gpu_load', '--%')})")
-                if hasattr(self, 'lbl_top_ram_pill'):
-                    self.lbl_top_ram_pill.setText(f"RAM: {metrics.get('ram_used', '-- GB')}")
+                self._update_top_bar_telemetry_text(metrics)
                 if hasattr(self, 'lbl_rail_ram_val'):
                     self.lbl_rail_ram_val.setText(str(metrics.get('ram_used', '-- GB')))
                 if hasattr(self, 'bar_rail_ram'):
