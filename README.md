@@ -54,16 +54,20 @@ Python veya ek kütüphane kurmanıza gerek yoktur:
   - Sol menüdeki tek tuşla veya Sistem Ayarları üzerinden tüm stüdyo ve alt pencereleri anında Türkçe / İngilizce arasında değiştirin.
 - **🖥️ Çoklu Ekran Çalışma Alanı (Multi-Screen Workspace):**
   - Aynı anda hem **USB Seri LCD (COM Port)** hem de **HDMI / DisplayPort** kasa ekranlarını bağımsız temalarla ve bağımsız çözünürlüklerle (`320×1480`, `480×1920`, `1280×400`, `1920×1080`, `2560×1440`, `3840×2160` veya özel boyut) yönetin.
-- **📊 30+ Canlı Donanım ve Medya Bileşeni:**
-  - **CPU & GPU:** Sıcaklık, yük (%), frekans (MHz), fan devri (RPM/%).
-  - **Sistem & Ağ (Özelleştirilebilir RAM Modları):** RAM kullanımı (`Kullanılan GB`, `Kullanılan %`, `Kullanılan GB + %`, `Kalan/Boş GB`, `Kalan %`, `Kalan GB + %` — gösterilen değer ile ilerleme çubuğu her zaman birebir senkronize!), NVMe/SATA disk okuma-yazma hızı, canlı indirme/yükleme (Download/Upload) hızı, canlı Ping monitörü ve 60 saniyelik Sparkline çizgi grafikleri.
-  - **Zengin Widget'lar:** RTSS/Win32 tabanlı oyun FPS sayacı, Windows SMTC canlı medya/YouTube Music kartı, otomatik konumlu hava durumu kartı, etkinlik geri sayım sayacı, dairesel/yatay/dikey göstergeler ve özelleştirilebilir kayan LED metin (Marquee).
-- **📐 Tuvale Göre Otomatik Pencere Boyutlandırma & Orantısal Ölçekleme:**
-  - Seçilen ekran tuvaline (`320×1480` dikey şerit veya `1920×1080` yatay ekran) göre pencere boyutu otomatik optimize edilir; pencereyi elle büyütüp küçülttüğünüzde canlı tuval de aynı oranda dinamik olarak ölçeklenir.
-- **🔄 Otomatik Güncelleme Sistemi:**
-  - Uygulama her açılışta GitHub üzerinden yeni sürüm kontrolü yapar ve yeni bir güncelleme varsa otomatik olarak indirip yükler.
-- **🎮 Otomatik Oyun Profili Bağlayıcı:**
-  - Bilgisayarınızdaki Steam, Epic Games veya özel `.exe` oyunlarını istediğiniz temaya bağlayın. Oyun açıldığında kasa ekranınız otomatik olarak o oyunun temasına geçer, oyun kapandığında masaüstü temanıza geri döner.
+- **📊 40+ Canlı Donanım, Ses ve Medya Bileşeni:**
+  - **CPU, GPU, Güç & Soğutma:** CPU/GPU sıcaklığı, GPU Hotspot sıcaklığı, CPU/GPU yükü (%), frekans (MHz), **CPU Paket Gücü (W)**, **GPU Güç Tüketimi (W)**, **Sıvı Soğutma (AIO) Sıcaklığı (°C)**, **Anakart / VRM Sıcaklığı (°C)** ve fan devri (RPM/%).
+  - **Oyun Performans Analizi:** RTSS/Win32 tabanlı canlı **FPS Sayacı**, **🎯 1% Low FPS**, **📉 Frametime (`ms`)** gecikmesi, **🕹️ Aktif Oyun Oturum Süresi** ve **⏳ PC Açık Kalma Süresi (Uptime)** sayaçları.
+  - **🎛️ Canlı Ses / Müzik Ekolayzırı (WASAPI Audio Visualizer):** Sistem sesine duyarlı gerçek zamanlı 24-bant **Dikey LED Barlar (Bars)** ve **Akıcı Neon Ses Dalgası (Wave)** spektrumu.
+  - **Sistem Belleği, GPU VRAM & Ağ (6 Farklı Gösterim Modu):** Hem Sistem RAM hem de GPU VRAM için 6 seçilebilir mod (`Kullanılan GB`, `Kullanılan %`, `Kullanılan GB + %`, `Kalan/Boş GB`, `Kalan %`, `Kalan GB + %` — gösterilen değer ile ilerleme çubuğu her zaman birebir senkronize!), NVMe/SATA disk I/O hızı, canlı Download/Upload hızı, canlı Ping monitörü ve 60 saniyelik Sparkline çizgi grafikleri.
+- **📌 Tema Bazlı Bağımsız Düzen Kaydetme & Seçmeli Düzen Aktarımı:**
+  - **`📌 Bu Temaya Kaydet` (`Ctrl+S`):** Araç yerleşimini yalnızca aktif temaya kaydederek her temanın kendine özgü farklı bir düzene sahip olmasını sağlar.
+  - **`🔄 Tümüne Uygula` (Çoklu Seçim Penceresi):** Mevcut düzeni aynı çözünürlükteki tüm temalara veya onay kutularıyla seçtiğiniz belirli temalara tek tıkla aktarır.
+- **🎨 Tek Tıkla Tema Renk Paleti, 🖌️ Stil Kopyala/Yapıştır & 🔗 Katman Gruplama:**
+  - Tek tıkla tüm araçları 6 hazır renk paletine (*Siber Mavi, ROG Kırmızı, Matrix Yeşil, Neon Synthwave Mor, Cyberpunk Altın, Buz Beyazı*) dönüştürün, araç stillerini kopyalayıp yapıştırın (`Ctrl+Shift+C` / `Ctrl+Shift+V`), öğeleri gruplayın (`Ctrl+G`) ve piksel cetvelleriyle hizalayın.
+- **☀️ Ekran Parlaklığı, 🌙 Uyku Modu, Windows Kilidi (`Win+L`) IPS Koruması & 🎬 GIF/MP4 Çıktı:**
+  - Üst çubuktan ekran parlaklığını (`%5-%100`) ayarlayın, bilgisayar kilitlendiğinde (`Win+L`) kasa ekranını otomatik uyku moduna alın ve aktif temanızı hareketli **`.gif` veya `.mp4` video** olarak dışa aktarın.
+- **🎮 14+ Oyun Başlatıcısı (Launcher) Destekli Otomatik Oyun Profili Bağlayıcı:**
+  - **Steam, Epic Games, Xbox / PC Game Pass (`.GamingRoot`), Riot Games, EA App / Origin, Ubisoft Connect, Battle.net, GOG Galaxy, Rockstar Games, Amazon Games, Heroic, itch.io, HoYoPlay, Wargaming** ve özel oyun klasörlerindeki oyunları otomatik bulur; oyun açıldığında o oyunun temasına geçer, kapandığında masaüstü temanıza döner.
 - **↻ Seçmeli Otomatik Tema Döngüsü (Playlist):**
   - Her ekran için ayrı ayrı hangi temaların, hangi süreyle ve sırayla (veya rastgele) değişeceğini belirleyin.
 - **📦 Tek Dosya `.cptheme` Paketleme & Akıllı Ölçeklendirme:**
@@ -95,16 +99,20 @@ No Python installation is required to run the standalone Windows build:
   - Switch the entire studio and all sub-dialogs between English and Turkish with a single click from the left sidebar or System Settings.
 - **🖥️ Multi-Screen Workspace Engine:**
   - Drive both **USB Serial LCDs (COM Port)** and **HDMI / DisplayPort** case monitors simultaneously with independent themes and independent resolutions (`320×1480`, `480×1920`, `1280×400`, `1920×1080`, `2560×1440`, `3840×2160`, or custom dimensions).
-- **📊 30+ Live Hardware & Media Widgets:**
-  - **CPU & GPU:** Temperature, load (%), clock frequency (MHz), fan speed (RPM/%).
-  - **System & Network (Customizable RAM Modes):** RAM telemetry with 6 user-selectable modes (`Used GB`, `Used %`, `Used GB + %`, `Free GB`, `Free %`, `Free GB + %` — the progress bar always matches the displayed metric!), NVMe/SATA disk read/write throughput, live download/upload speed, live Ping monitor, and 60-second Sparkline history graphs.
-  - **Rich Widgets:** RTSS/Win32 in-game FPS counter, Windows SMTC Now Playing / YouTube Music card, auto-location live weather card, event countdown timer, radial/horizontal/vertical gauges, and customizable scrolling LED ticker (Marquee).
-- **📐 Adaptive Window Sizing & Proportional Canvas Scaling:**
-  - Automatically adjusts the studio window to fit the active canvas aspect ratio (`320×1480` vertical strip vs `1920×1080` landscape), while allowing free manual window resizing with 100% proportional live canvas scaling.
-- **🔄 Automatic Startup Updater:**
-  - Automatically checks GitHub for updates on startup and installs new releases seamlessly.
-- **🎮 Automatic Game Profile Switcher:**
-  - Bind any installed Steam, Epic Games, or custom `.exe` game to a specific theme. When the game launches, your case screen automatically switches to that game's theme and restores your desktop theme when the game exits.
+- **📊 40+ Live Hardware, Audio & Media Widgets:**
+  - **CPU, GPU, Power & Cooling:** CPU/GPU temperature, GPU Hotspot temperature, CPU/GPU load (%), clock frequency (MHz), **CPU Package Power (W)**, **GPU Power Draw (W)**, **Liquid Cooler (AIO) Temp (°C)**, **Motherboard / VRM Temp (°C)**, and fan speeds (RPM/%).
+  - **Game Performance Telemetry:** RTSS/Win32 in-game **FPS Counter**, **🎯 1% Low FPS**, **📉 Frametime (`ms`)** latency, **🕹️ Active Game Session Timer**, and **⏳ System Uptime** counters.
+  - **🎛️ Live WASAPI Audio Visualizer:** Real-time 24-band reactive **Vertical LED Bars** and **Smooth Dual Neon Waveform** spectrum widgets.
+  - **System RAM, GPU VRAM & Network (6 Display Modes):** Both System RAM and GPU VRAM support 6 user-selectable modes (`Used GB`, `Used %`, `Used GB + %`, `Free GB`, `Free %`, `Free GB + %` — the progress bar always matches the displayed metric!), NVMe/SATA disk I/O, live Download/Upload speed, Ping monitor, and 60s Sparkline graphs.
+- **📌 Per-Theme Independent Layout Saving & Selective Multi-Theme Sync:**
+  - **`📌 Save to This Theme` (`Ctrl+S`):** Saves widget layout only to the currently active theme so every theme maintains its own independent layout.
+  - **`🔄 Apply to All` (Multi-Select Checklist):** Copy the active layout across all or specific checked themes of the same resolution in one click.
+- **🎨 1-Click Theme Color Palettes, 🖌️ Style Copy/Paste & 🔗 Layer Grouping:**
+  - Transform all widgets into 6 cohesive color palettes (*Cyber Cyan, ROG Red, Matrix Green, Neon Synthwave Purple, Cyberpunk Gold, Ice White*), copy/paste visual styles across widgets (`Ctrl+Shift+C` / `Ctrl+Shift+V`), group elements (`Ctrl+G`), and align with canvas pixel rulers.
+- **☀️ Display Brightness, 🌙 Standby Mode, Windows Lock (`Win+L`) IPS Protection & 🎬 GIF/MP4 Export:**
+  - Adjust hardware/frame brightness (`5%–100%`) from the top bar, automatically put the case screen to sleep when Windows is locked (`Win+L`), and export live animated **`.gif` or `.mp4` video** previews of your active theme.
+- **🎮 14+ Game Launcher Auto-Discovery & Game Profile Switcher:**
+  - Automatically scans **Steam, Epic Games, Xbox / PC Game Pass (`.GamingRoot`), Riot Games, EA App / Origin, Ubisoft Connect, Battle.net, GOG Galaxy, Rockstar Games, Amazon Games, Heroic, itch.io, HoYoPlay, Wargaming**, and custom game folders; switches to a game's bound theme on launch and restores your desktop theme on exit.
 - **↻ Per-Screen Selective Auto-Rotation (Playlist):**
   - Choose which themes rotate, in what order (sequential or shuffle), and at what interval independently for each connected display.
 - **📦 Single-File `.cptheme` Packaging & Smart Resolution Scaling:**
