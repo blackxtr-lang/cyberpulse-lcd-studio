@@ -409,11 +409,23 @@ TR_TO_EN_EXACT = {
     "Ekran Uyku / Bekleme Modu (Ekranı Karart / Uyandır)": "Display Standby / Sleep Mode (Dim / Wake Screen)",
     "Seçili Öğeleri Grupla / Grubu Çöz (Ctrl+G)": "Group / Ungroup Selected Widgets (Ctrl+G)",
     "Başlık / Etiket:": "Title / Label:",
+    "📌  Bu Temaya Düzeni Kaydet": "📌  Save to This Theme",
+    "📌  Bu Temaya Kaydet": "📌  Save to This Theme",
+    "📌 Kaydet": "📌 Save",
+    "↶ Geri": "↶ Undo",
+    "↷ İleri": "↷ Redo",
+    "Mevcut düzeni yalnızca bu temaya kaydet (Ctrl+S)": "Save current layout only to this active theme (Ctrl+S)",
+    "Mevcut ekrandaki ögeleri ve yerleşim düzenini YALNIZCA şu an açık olan aktif temaya kaydeder (Diğer temaların düzenini değiştirmez - Ctrl+S)":
+        "Saves the current elements and layout ONLY to the currently active theme (Does not overwrite other themes - Ctrl+S)",
 }
 
 # Dynamic regex patterns (Turkish -> English)
 TR_TO_EN_PATTERNS = [
     (re.compile(r"^🔄\s*Düzeni Uygula \((.+)\)$"), lambda m: f"🔄  Apply Layout ({m.group(1)})"),
+    (re.compile(r"^🔄\s*Tümüne Düzeni Uygula \((.+)\)$"), lambda m: f"🔄  Apply to All ({m.group(1)})"),
+    (re.compile(r"^🔄\s*Tümüne Uygula \((.+)\)$"), lambda m: f"🔄  Apply to All ({m.group(1)})"),
+    (re.compile(r"^↶ Geri \((\d+)\)$"), lambda m: f"↶ Undo ({m.group(1)})"),
+    (re.compile(r"^↷ İleri \((\d+)\)$"), lambda m: f"↷ Redo ({m.group(1)})"),
     (re.compile(r"^KATMANLAR \((\d+) ÖGE\)$"), lambda m: f"LAYERS ({m.group(1)} ITEMS)"),
     (re.compile(r"^📐 (\d+×\d+) \(Dikey\)$"), lambda m: f"📐 {m.group(1)} (Portrait)"),
     (re.compile(r"^📐 (\d+×\d+) \(Yatay\)$"), lambda m: f"📐 {m.group(1)} (Landscape)"),

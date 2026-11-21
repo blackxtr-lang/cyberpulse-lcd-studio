@@ -141,7 +141,7 @@ RGB_APP_SCRIPT = os.path.join(APP_BUNDLE_DIR, 'rgb_studio_gui.py')
 VERSION_FILE = os.path.join(APP_BUNDLE_DIR, 'version.json')
 os.makedirs(PRESET_THEMES_DIR, exist_ok=True)
 
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 try:
     if os.path.isfile(VERSION_FILE) and os.path.getsize(VERSION_FILE) <= 16384:
         with open(VERSION_FILE, 'r', encoding='utf-8') as _vf:
@@ -3830,6 +3830,11 @@ class InteractiveCanvasWidget(QWidget):
                 self.app.toggle_group_selected_elements()
             event.accept()
             return
+        elif key == Qt.Key_S and (mods & Qt.ControlModifier):
+            if hasattr(self.app, 'save_layout_to_current_theme_only'):
+                self.app.save_layout_to_current_theme_only(silent=False)
+            event.accept()
+            return
         super().keyPressEvent(event)
 
     def paintEvent(self, event):
@@ -4668,6 +4673,20 @@ class CyberPulseStudioGUI(QMainWindow):
                     json.dump(self.theme_data, f, ensure_ascii=False, indent=2)
                 if os.path.exists(temp_path):
                     os.replace(temp_path, LAST_THEME_FILE)
+            # Store per-theme independent layout snapshot in memory/settings so each theme keeps its own layout
+            t_name = str(self.theme_data.get('name') or '').strip()
+            if t_name and not getattr(self, '_in_auto_game_theme', False):
+                tw = max(64, int(self.theme_data.get('width', 320) or 320))
+                th = max(64, int(self.theme_data.get('height', 1480) or 1480))
+                per_layouts = self.app_settings.setdefault('per_theme_layouts', {})
+                if isinstance(per_layouts, dict):
+                    t_key = f"{t_name.lower()}_{tw}x{th}"
+                    per_layouts[t_key] = {
+                        'elements': json.loads(json.dumps(self.theme_data.get('elements', []))),
+                        'refresh_sec': self.theme_data.get('refresh_sec', 1.0),
+                        'rotation': self.theme_data.get('rotation', 180),
+                        'thermal_alert_limit': self.theme_data.get('thermal_alert_limit', 82),
+                    }
             self.save_screen_workspaces_to_disk()
         except Exception as e:
             print("Save theme note:", e)
@@ -5159,14 +5178,36 @@ class CyberPulseStudioGUI(QMainWindow):
             matched = next((t for t in themes if t['name'].strip().lower() == str(theme_name).strip().lower()), None)
             if not matched:
                 return False
+
+            # When explicitly switching themes in the editor, silently persist the previous theme's own layout to its file
+            if not preserve_editor_if_inactive and not getattr(self, '_in_auto_game_theme', False):
+                prev_td = ws.get('theme_data')
+                if isinstance(prev_td, dict) and prev_td.get('name'):
+                    self._persist_theme_dict_to_preset_file(prev_td)
+
             t_json = load_preset_theme_data(matched)
             if not t_json or not isinstance(t_json, dict):
                 return False
 
-            prev_w = int(ws['theme_data'].get('width', 320))
-            prev_h = int(ws['theme_data'].get('height', 1480))
             new_w = int(t_json.get('width', 320))
             new_h = int(t_json.get('height', 1480))
+
+            # Restore this theme's own individual layout if saved in per_theme_layouts
+            per_layouts = self.app_settings.get('per_theme_layouts', {})
+            if isinstance(per_layouts, dict):
+                t_key = f"{matched['name'].strip().lower()}_{new_w}x{new_h}"
+                saved_lay = per_layouts.get(t_key)
+                if isinstance(saved_lay, dict) and isinstance(saved_lay.get('elements'), list):
+                    t_json['elements'] = json.loads(json.dumps(saved_lay['elements']))
+                    if 'refresh_sec' in saved_lay:
+                        t_json['refresh_sec'] = saved_lay['refresh_sec']
+                    if 'rotation' in saved_lay:
+                        t_json['rotation'] = saved_lay['rotation']
+                    if 'thermal_alert_limit' in saved_lay:
+                        t_json['thermal_alert_limit'] = saved_lay['thermal_alert_limit']
+
+            prev_w = int(ws['theme_data'].get('width', 320))
+            prev_h = int(ws['theme_data'].get('height', 1480))
 
             # During background auto-rotation, keep the screen's locked resolution;
             # when explicitly selected by the user, switch to the theme's native canvas resolution!
@@ -5705,16 +5746,40 @@ class CyberPulseStudioGUI(QMainWindow):
             r_btn.clicked.connect(r_cb)
             rail_vbox.addWidget(r_btn)
 
+        # Save Layout ONLY to Current Active Theme (Per-Theme Independent Layout)
+        self.btn_save_single_theme_layout = QPushButton("📌  Bu Temaya Kaydet")
+        self.btn_save_single_theme_layout.setToolTip(
+            "Mevcut ekrandaki ögeleri ve yerleşim düzenini YALNIZCA şu an açık olan aktif temaya kaydeder (Diğer temaların düzenini değiştirmez - Ctrl+S)"
+        )
+        self.btn_save_single_theme_layout.setStyleSheet("""
+            QPushButton {
+                background: rgba(78, 222, 163, 0.14);
+                color: #4edea3;
+                border: 1px solid rgba(78, 222, 163, 0.35);
+                border-radius: 6px;
+                padding: 8px 10px;
+                font-size: 11px;
+                font-weight: 800;
+                text-align: left;
+            }
+            QPushButton:hover {
+                background: rgba(78, 222, 163, 0.28);
+                color: #ffffff;
+            }
+        """)
+        self.btn_save_single_theme_layout.clicked.connect(lambda: self.save_layout_to_current_theme_only(silent=False))
+        rail_vbox.addWidget(self.btn_save_single_theme_layout)
+
         # Batch Apply Layout to Same-Resolution Themes (Single Placement in Left Sidebar)
-        self.btn_apply_full_layout = QPushButton(f"🔄  Düzeni Uygula ({init_w}×{init_h})")
-        self.btn_apply_full_layout.setToolTip("Mevcut ekrandaki tüm ögeleri ve düzeni yalnızca bu ekranla aynı çözünürlükteki kayıtlı temalarınıza aktarır")
+        self.btn_apply_full_layout = QPushButton(f"🔄  Tümüne Uygula ({init_w}×{init_h})")
+        self.btn_apply_full_layout.setToolTip("Mevcut ekrandaki tüm ögeleri ve düzeni bu ekranla aynı çözünürlükteki tüm kayıtlı temalarınıza aktarır")
         self.btn_apply_full_layout.setStyleSheet("""
             QPushButton {
                 background: rgba(0, 166, 224, 0.14);
                 color: #7bd0ff;
                 border: 1px solid rgba(123, 208, 255, 0.30);
                 border-radius: 6px;
-                padding: 9px 12px;
+                padding: 8px 10px;
                 font-size: 11px;
                 font-weight: 800;
                 text-align: left;
@@ -5855,21 +5920,21 @@ class CyberPulseStudioGUI(QMainWindow):
         telem_pill = QFrame()
         telem_pill.setStyleSheet("QFrame { background-color: #060e20; border: 1px solid #1e293b; border-radius: 7px; }")
         tp_hbox = QHBoxLayout(telem_pill)
-        tp_hbox.setContentsMargins(10, 4, 10, 4)
-        tp_hbox.setSpacing(12)
+        tp_hbox.setContentsMargins(8, 4, 8, 4)
+        tp_hbox.setSpacing(8)
 
         self.lbl_top_gpu_pill = QLabel("GPU: --°C (--%)")
-        self.lbl_top_gpu_pill.setMinimumWidth(112)
+        self.lbl_top_gpu_pill.setMinimumWidth(98)
         self.lbl_top_gpu_pill.setStyleSheet("color: #7bd0ff; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800; border: none; background: transparent;")
         tp_hbox.addWidget(self.lbl_top_gpu_pill)
 
         self.lbl_top_cpu_pill = QLabel("CPU: --°C (--%)")
-        self.lbl_top_cpu_pill.setMinimumWidth(112)
+        self.lbl_top_cpu_pill.setMinimumWidth(98)
         self.lbl_top_cpu_pill.setStyleSheet("color: #c0c1ff; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800; border: none; background: transparent;")
         tp_hbox.addWidget(self.lbl_top_cpu_pill)
 
         self.lbl_top_ram_pill = QLabel("RAM: -- GB")
-        self.lbl_top_ram_pill.setMinimumWidth(96)
+        self.lbl_top_ram_pill.setMinimumWidth(84)
         self.lbl_top_ram_pill.setStyleSheet("color: #4edea3; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800; border: none; background: transparent;")
         tp_hbox.addWidget(self.lbl_top_ram_pill)
 
@@ -5878,7 +5943,7 @@ class CyberPulseStudioGUI(QMainWindow):
         tp_hbox.addWidget(tp_sep2)
 
         self.lbl_top_res_pill = QLabel(f"{init_w}×{init_h}")
-        self.lbl_top_res_pill.setMinimumWidth(75)
+        self.lbl_top_res_pill.setMinimumWidth(64)
         self.lbl_top_res_pill.setStyleSheet("color: #908fa0; font-family: 'Consolas', monospace; font-size: 10px; font-weight: 800; border: none; background: transparent;")
         tp_hbox.addWidget(self.lbl_top_res_pill)
 
@@ -5920,8 +5985,8 @@ class CyberPulseStudioGUI(QMainWindow):
         pp_lay.addWidget(lbl_port)
 
         self.combo_port = QComboBox()
-        self.combo_port.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        self.combo_port.setMinimumContentsLength(14)
+        self.combo_port.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.combo_port.setMinimumWidth(142)
         self.combo_port.setStyleSheet("background: #131b2e; border: none; border-radius: 4px; padding: 2px 6px; color: #4edea3; font-family: 'Consolas', monospace; font-size: 11px; font-weight: 800;")
         self.combo_port.currentIndexChanged.connect(self.on_port_selection_changed)
         pp_lay.addWidget(self.combo_port)
@@ -5966,8 +6031,8 @@ class CyberPulseStudioGUI(QMainWindow):
 
         self.btn_top_sleep = QPushButton("🌙")
         self.btn_top_sleep.setToolTip("Kasa Ekranı Uyku Modu (Ekranı karart / uyandır)")
-        self.btn_top_sleep.setFixedSize(24, 22)
-        self.btn_top_sleep.setStyleSheet("background: #131b2e; color: #7bd0ff; border: none; border-radius: 4px; font-size: 11px;")
+        self.btn_top_sleep.setFixedSize(26, 22)
+        self.btn_top_sleep.setStyleSheet("background: #131b2e; color: #7bd0ff; border: none; border-radius: 4px; padding: 0px; font-size: 11px;")
         self.btn_top_sleep.clicked.connect(self.toggle_screen_sleep_mode)
         bp_lay.addWidget(self.btn_top_sleep)
         nav_box.addWidget(bright_pill)
@@ -6365,7 +6430,7 @@ class CyberPulseStudioGUI(QMainWindow):
         self.center_box = QFrame()
         self.center_box.setObjectName("stitchCenterStageCard")
         center_box = self.center_box
-        center_box.setMinimumWidth(360)
+        center_box.setMinimumWidth(425)
         center_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         center_box.setStyleSheet("""
             QFrame#stitchCenterStageCard {
@@ -6381,24 +6446,25 @@ class CyberPulseStudioGUI(QMainWindow):
         stage_top_bar = QFrame()
         stage_top_bar.setStyleSheet("QFrame { background-color: #060e20; border: 1px solid #1e293b; border-radius: 8px; }")
         canvas_toolbar = QHBoxLayout(stage_top_bar)
-        canvas_toolbar.setContentsMargins(8, 4, 8, 4)
-        canvas_toolbar.setSpacing(6)
+        canvas_toolbar.setContentsMargins(6, 4, 6, 4)
+        canvas_toolbar.setSpacing(5)
 
-        self.btn_undo = QPushButton("↶ Geri Al")
+        self.btn_undo = QPushButton("↶ Geri")
         self.btn_undo.setToolTip("Son işlemi geri al (Ctrl+Z)")
         self.btn_undo.setEnabled(False)
-        self.btn_undo.setStyleSheet("background: #171f33; color: #dae2fd; border: none; border-radius: 5px; padding: 4px 8px; font-size: 11px; font-weight: 800;")
+        self.btn_undo.setStyleSheet("background: #171f33; color: #dae2fd; border: none; border-radius: 5px; padding: 3px 6px; font-size: 10px; font-weight: 800;")
         self.btn_undo.clicked.connect(self.undo_action)
         canvas_toolbar.addWidget(self.btn_undo)
 
-        self.btn_redo = QPushButton("↷ İleri Al")
+        self.btn_redo = QPushButton("↷ İleri")
         self.btn_redo.setToolTip("Geri alınan işlemi yinele (Ctrl+Y)")
         self.btn_redo.setEnabled(False)
-        self.btn_redo.setStyleSheet("background: #171f33; color: #dae2fd; border: none; border-radius: 5px; padding: 4px 8px; font-size: 11px; font-weight: 800;")
+        self.btn_redo.setStyleSheet("background: #171f33; color: #dae2fd; border: none; border-radius: 5px; padding: 3px 6px; font-size: 10px; font-weight: 800;")
         self.btn_redo.clicked.connect(self.redo_action)
         canvas_toolbar.addWidget(self.btn_redo)
 
         self.chk_snap_guides = QCheckBox("⊞ Mıknatıs")
+        self.chk_snap_guides.setMinimumWidth(86)
         self.chk_snap_guides.setChecked(True)
         self.chk_snap_guides.setToolTip("Sürüklerken tuval merkezine ve diğer ögelere otomatik hizala (Alt tuşu ile geçici devre dışı bırakılır)")
         self.chk_snap_guides.setStyleSheet("color: #7bd0ff; font-weight: 800; font-size: 10px; border: none; background: transparent;")
@@ -6408,15 +6474,25 @@ class CyberPulseStudioGUI(QMainWindow):
         canvas_toolbar.addStretch()
 
         self.lbl_center_ws_title = QLabel(f"🎨 {self.theme_data.get('name', 'Özel')}")
-        self.lbl_center_ws_title.setStyleSheet("color: #908fa0; font-size: 11px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_center_ws_title.setStyleSheet("color: #908fa0; font-size: 10px; font-weight: 800; border: none; background: transparent;")
         canvas_toolbar.addWidget(self.lbl_center_ws_title)
 
         canvas_toolbar.addStretch()
 
+        self.btn_stage_save_theme_layout = QPushButton("📌 Kaydet")
+        self.btn_stage_save_theme_layout.setToolTip("Mevcut düzeni yalnızca bu temaya kaydet (Ctrl+S)")
+        self.btn_stage_save_theme_layout.setStyleSheet(
+            "QPushButton { background: rgba(78, 222, 163, 0.16); color: #4edea3; border: 1px solid rgba(78, 222, 163, 0.35); "
+            "border-radius: 5px; padding: 3px 7px; font-size: 10px; font-weight: 800; } "
+            "QPushButton:hover { background: rgba(78, 222, 163, 0.32); color: #ffffff; }"
+        )
+        self.btn_stage_save_theme_layout.clicked.connect(lambda: self.save_layout_to_current_theme_only(silent=False))
+        canvas_toolbar.addWidget(self.btn_stage_save_theme_layout)
+
         self.lbl_canvas_res_badge = QLabel(f"📐 {init_w}×{init_h}")
         self.lbl_canvas_res_badge.setStyleSheet(
             "background: rgba(128, 131, 255, 0.16); color: #c0c1ff; border: 1px solid rgba(128, 131, 255, 0.35); "
-            "border-radius: 5px; padding: 3px 9px; font-family: 'Consolas', monospace; font-size: 10px; font-weight: 900;"
+            "border-radius: 5px; padding: 2px 6px; font-family: 'Consolas', monospace; font-size: 10px; font-weight: 900;"
         )
         canvas_toolbar.addWidget(self.lbl_canvas_res_badge)
 
@@ -7015,16 +7091,16 @@ class CyberPulseStudioGUI(QMainWindow):
             ratio = float(tw) / max(1.0, float(th))
 
             # Ideal window dimensions depending on canvas aspect ratio:
-            # Left rail (232) + Left panel (310) + Center stage (360+) + Right inspector (355) + margins (~40) = ~1300 px
+            # Left rail (232) + Left panel (310) + Center stage (425+) + Right inspector (355) + margins (~40) = ~1375 px
             if ratio <= 0.35:
                 # Tall vertical strip (e.g. 320x1480, 480x1920) -> compact width, tall height
-                target_w, target_h = 1310, 860
+                target_w, target_h = 1380, 860
             elif ratio < 0.85:
                 # Portrait 9:16 (e.g. 1080x1920) -> medium width, tall height
-                target_w, target_h = 1380, 860
+                target_w, target_h = 1400, 860
             elif ratio <= 1.25:
                 # Square-ish
-                target_w, target_h = 1420, 840
+                target_w, target_h = 1440, 840
             elif ratio <= 2.2:
                 # Standard 16:9 / 16:10 Landscape (e.g. 1920x1080, 1024x600, 800x480)
                 target_w, target_h = 1540, 840
@@ -7036,17 +7112,17 @@ class CyberPulseStudioGUI(QMainWindow):
             if screen:
                 avail = screen.availableGeometry()
                 if avail.width() >= 1024 and avail.height() >= 720:
-                    target_w = min(target_w, max(1180, avail.width() - 30))
+                    target_w = min(target_w, max(1240, avail.width() - 30))
                     target_h = min(target_h, max(640, avail.height() - 30))
 
             if not self.isMaximized() and not self.isFullScreen():
                 self.resize(int(target_w), int(target_h))
 
             if hasattr(self, 'main_splitter'):
-                avail_split_w = max(900, int(target_w) - 255)
-                lw = max(310, int(avail_split_w * 0.27))
+                avail_split_w = max(960, int(target_w) - 255)
+                lw = max(310, int(avail_split_w * 0.25))
                 rw = max(355, int(avail_split_w * 0.31))
-                cw = max(360, avail_split_w - lw - rw)
+                cw = max(425, avail_split_w - lw - rw)
                 self.main_splitter.setSizes([lw, cw, rw])
 
             QTimer.singleShot(25, self.update_canvas_geometry)
@@ -7140,6 +7216,111 @@ class CyberPulseStudioGUI(QMainWindow):
             apply_language_to_widget_tree(self, lang)
         except Exception as e:
             print("apply_current_language note:", e)
+
+    def _persist_theme_dict_to_preset_file(self, theme_dict):
+        """
+        📌 Writes the layout (elements, refresh_sec, rotation, thermal_alert_limit) of `theme_dict`
+        directly into ONLY its own corresponding .cptheme or .json preset file in themes/.
+        Returns True if a matching preset file was found and updated.
+        """
+        if not isinstance(theme_dict, dict):
+            return False
+        t_name = str(theme_dict.get('name') or '').strip()
+        if not t_name:
+            return False
+        try:
+            themes_list = get_all_preset_themes()
+            t_item = next((t for t in themes_list if t['name'].strip().lower() == t_name.lower()), None)
+            if not t_item:
+                return False
+            t_json = load_preset_theme_data(t_item)
+            if not t_json or not isinstance(t_json, dict):
+                return False
+
+            t_json['elements'] = json.loads(json.dumps(theme_dict.get('elements', [])))
+            t_json['refresh_sec'] = theme_dict.get('refresh_sec', 1.0)
+            t_json['rotation'] = theme_dict.get('rotation', 180)
+            t_json['thermal_alert_limit'] = theme_dict.get('thermal_alert_limit', 82)
+            t_json['width'] = max(64, int(theme_dict.get('width', t_json.get('width', 320)) or 320))
+            t_json['height'] = max(64, int(theme_dict.get('height', t_json.get('height', 1480)) or 1480))
+
+            prev_cropping = getattr(self, 'is_cropping', False)
+            self.is_cropping = True
+            try:
+                if t_item.get('is_cptheme') and t_item.get('cptheme_path'):
+                    if hasattr(self, 'hardware') and self.hardware:
+                        self.hardware.reset_background_media()
+                    for ws in list(getattr(self, 'screen_workspaces', {}).values()):
+                        hw = ws.get('hardware')
+                        if hw:
+                            hw.reset_background_media()
+                    return bool(update_cptheme_metadata(t_item['cptheme_path'], t_json))
+                else:
+                    f_path = t_item.get('json_path')
+                    if f_path and _is_safe_local_file_path(f_path) and os.path.exists(f_path):
+                        tmp_f = f_path + ".tmp"
+                        with open(tmp_f, 'w', encoding='utf-8') as f:
+                            json.dump(t_json, f, ensure_ascii=False, indent=2)
+                        os.replace(tmp_f, f_path)
+                        return True
+            finally:
+                self.is_cropping = prev_cropping
+        except Exception as e:
+            print("_persist_theme_dict_to_preset_file note:", e)
+        return False
+
+    def save_layout_to_current_theme_only(self, silent=False):
+        """
+        📌 Saves the current canvas widget layout and positions ONLY to the currently active theme!
+        Other saved themes are NOT modified, allowing every theme to have its own unique layout.
+        """
+        try:
+            self.save_theme_to_disk()
+            self.save_app_settings()
+            curr_name = str(self.theme_data.get('name') or '').strip()
+            curr_w = max(64, int(self.theme_data.get('width', 320)))
+            curr_h = max(64, int(self.theme_data.get('height', 1480)))
+
+            if curr_name and self._persist_theme_dict_to_preset_file(self.theme_data):
+                if not silent:
+                    QMessageBox.information(
+                        self,
+                        "📌 Tema Düzeni Kaydedildi",
+                        f"Mevcut tuvaldeki öğeler ve yerleşim düzeni YALNIZCA '{curr_name}' ({curr_w}×{curr_h}) temasına kaydedildi!\n\n"
+                        f"Diğer temalarınızın kendi özel düzenleri korundu."
+                    )
+                return True
+
+            # If this theme is not yet saved as a preset in themes/, offer to save it as a preset now
+            if not silent:
+                default_tname = curr_name if (curr_name and curr_name.lower() not in ('özel', 'özel tema', 'custom')) else f"Özel Tema ({curr_w}x{curr_h})"
+                tname, ok = QInputDialog.getText(
+                    self,
+                    "📌 Bu Temayı ve Özel Düzenini Kaydet",
+                    "Bu tema henüz şablon arşivinde kayıtlı değil.\nYalnızca bu temaya özel düzen olarak kaydetmek için bir tema adı girin:",
+                    text=default_tname
+                )
+                if ok and tname.strip():
+                    clean_name = tname.strip()
+                    self.theme_data['name'] = clean_name
+                    ok_bake, msg = bake_and_save_preset_theme(self, clean_name)
+                    if ok_bake:
+                        self.save_theme_to_disk()
+                        self.save_app_settings()
+                        self.refresh_multi_screen_bar_ui()
+                        QMessageBox.information(
+                            self,
+                            "📌 Tema ve Özel Düzeni Kaydedildi",
+                            f"'{clean_name}' ({curr_w}×{curr_h}) teması kendine özel yerleşim düzeniyle kaydedildi!"
+                        )
+                        return True
+                    else:
+                        QMessageBox.warning(self, "Hata", f"Tema kaydedilemedi: {msg}")
+            return False
+        except Exception as e:
+            if not silent:
+                QMessageBox.warning(self, "Kaydetme Hatası", f"Tema düzeni kaydedilirken hata oluştu: {e}")
+            return False
 
     def apply_full_layout_to_all_themes(self):
         """
@@ -7254,6 +7435,17 @@ class CyberPulseStudioGUI(QMainWindow):
                         ws_td['rotation'] = rotation
                         ws_td['thermal_alert_limit'] = thermal_limit
 
+            # Sync per_theme_layouts for all updated themes of this resolution
+            per_layouts = self.app_settings.setdefault('per_theme_layouts', {})
+            if isinstance(per_layouts, dict):
+                for u_name in updated_names_lower:
+                    per_layouts[f"{u_name}_{curr_w}x{curr_h}"] = {
+                        'elements': json.loads(json.dumps(current_elements)),
+                        'refresh_sec': refresh_sec,
+                        'rotation': rotation,
+                        'thermal_alert_limit': thermal_limit,
+                    }
+            self.save_app_settings()
             self.save_screen_workspaces_to_disk()
 
             QMessageBox.information(
@@ -7395,10 +7587,10 @@ class CyberPulseStudioGUI(QMainWindow):
     def update_undo_redo_ui(self):
         if hasattr(self, 'btn_undo'):
             self.btn_undo.setEnabled(len(self.undo_stack) > 0)
-            self.btn_undo.setText(f"↩️ Geri Al ({len(self.undo_stack)})" if self.undo_stack else "↩️ Geri Al")
+            self.btn_undo.setText(f"↶ Geri ({len(self.undo_stack)})" if self.undo_stack else "↶ Geri")
         if hasattr(self, 'btn_redo'):
             self.btn_redo.setEnabled(len(self.redo_stack) > 0)
-            self.btn_redo.setText(f"↪️ İleri Al ({len(self.redo_stack)})" if self.redo_stack else "↪️ İleri Al")
+            self.btn_redo.setText(f"↷ İleri ({len(self.redo_stack)})" if self.redo_stack else "↷ İleri")
 
     def add_sensor_element(self, item):
         if not item:
@@ -8588,7 +8780,7 @@ class CyberPulseStudioGUI(QMainWindow):
                 tw = int(active_ws.get('theme_data', {}).get('width', 320))
                 th = int(active_ws.get('theme_data', {}).get('height', 1480))
                 if hasattr(self, 'btn_apply_full_layout'):
-                    self.btn_apply_full_layout.setText(f"🔄  Düzeni Uygula ({tw}×{th})")
+                    self.btn_apply_full_layout.setText(f"🔄  Tümüne Uygula ({tw}×{th})")
                 if hasattr(self, 'lbl_top_res_pill'):
                     self.lbl_top_res_pill.setText(f"{tw}×{th}")
                 if hasattr(self, 'lbl_bg_res_tag'):

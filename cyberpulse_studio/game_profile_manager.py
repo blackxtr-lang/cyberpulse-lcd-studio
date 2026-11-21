@@ -1690,7 +1690,7 @@ class GameProfileManagerDialog(QDialog):
             # Platform badge
             badge_col = platform_colors.get(plat, '#6366f1')
             lbl_plat = QLabel(plat)
-            lbl_plat.setFixedWidth(92)
+            lbl_plat.setFixedWidth(124)
             lbl_plat.setAlignment(Qt.AlignCenter)
             lbl_plat.setStyleSheet(f"background: {badge_col}; color: white; font-size: 10px; font-weight: 800; padding: 4px 6px; border-radius: 5px; border: none;")
             row.addWidget(lbl_plat)
